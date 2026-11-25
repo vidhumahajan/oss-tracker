@@ -75,6 +75,12 @@ export function isList(value, { min = 0, max }) {
   return Array.isArray(value) && value.length >= min && value.length <= max;
 }
 
+// A GitHub username: letters, digits and single dashes, at most 39
+// characters. Anything else cannot be a real account.
+export function isGithubLogin(value) {
+  return typeof value === "string" && /^[A-Za-z0-9](?:-?[A-Za-z0-9]){0,38}$/.test(value);
+}
+
 // A search box value: a short plain string, or "" if missing.
 export function parseSearch(value) {
   return typeof value === "string" ? value.trim().slice(0, 100) : "";

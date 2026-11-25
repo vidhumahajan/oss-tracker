@@ -6,10 +6,20 @@ import { useAuth, loginUrl } from "../auth.jsx";
 import { number, plural, shortDate } from "../format.js";
 import Avatar from "../components/Avatar.jsx";
 import MergeGraph from "../components/MergeGraph.jsx";
+import BadgePanel from "../components/BadgePanel.jsx";
 
 const LOGIN_ERRORS = {
   login_failed: "GitHub login did not complete. Try again.",
   suspended: "This account has been suspended by the admins.",
+};
+
+// Where "Add it for me" sends the member back when the badge was not added.
+// Success goes to their profile instead (see Profile.jsx).
+const BADGE_RESULTS = {
+  unchanged: "Nothing was changed on your GitHub.",
+  wrong_account:
+    "You approved with a different GitHub account from the one you log in with. Nothing was changed on your GitHub.",
+  failed: "We could not add the badge. Try again in a few minutes, or copy the line by hand.",
 };
 
 const LOGGED_OUT_REASONS = {
@@ -21,6 +31,7 @@ export default function Home() {
   const location = useLocation();
   const [params] = useSearchParams();
   const loginError = LOGIN_ERRORS[params.get("error")];
+  const badgeResult = BADGE_RESULTS[params.get("badge")];
 
   // Changing this number makes the lists below load again.
   const [refreshKey, setRefreshKey] = useState(0);
@@ -49,6 +60,11 @@ export default function Home() {
   return (
     <>
       {loginError && <p className="status status-error">{loginError}</p>}
+      {badgeResult && (
+        <p className="status" role="status">
+          {badgeResult}
+        </p>
+      )}
       {!user && LOGGED_OUT_REASONS[loggedOutReason] && (
         <p className="status status-error" role="status">
           {LOGGED_OUT_REASONS[loggedOutReason]}
@@ -59,6 +75,8 @@ export default function Home() {
           <a href={loginUrl(location.state.loginFor)}>Log in with GitHub</a> to open that page.
         </p>
       )}
+
+      {user && <BadgePanel login={user.login} place="home" />}
 
       <div className="home">
         <div className="home-main">

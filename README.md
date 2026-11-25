@@ -13,6 +13,7 @@ Built with MongoDB, Express, React and Node (MERN), in plain JavaScript.
 - **Pull request summaries.** Before a GSoC or LFX interview, a member opens one of their merged pull requests and gets a short AI-written explanation: the problem, the solution, the concepts used, the files changed and three questions an interviewer could ask.
 - **Editing summaries.** The author or an admin can edit a saved summary at any time, or put the AI's original back. An edited summary says who edited it.
 - **Leaderboard.** This week, this month and all time.
+- **GitHub profile badge.** A small live badge with a member's merged count and rank, for their GitHub profile README, linking back to their profile here. One click adds it for them, or they copy one line by hand.
 - **Fair play.** Only merged pull requests count. Pull requests to your own repos are ignored. Admins can block a repo or exclude a single pull request.
 - **Mentors.** A public Mentors page lists a few experienced members. Members request a free 1-on-1 session, an admin confirms a time, and the member gets the Google Meet link. There is no payment.
 - **Weekly post.** On the admin Overview, one click writes a plain-text message with this week's top 5, totals and first-time mergers, ready to paste into the community's WhatsApp group.
@@ -83,6 +84,32 @@ A member can cancel their own requested or confirmed session. Each member can ha
 
 The Meet link is private. It is sent only to admins and to the member whose session is confirmed, and never appears on the public Mentors page.
 
+### The GitHub profile badge
+
+`GET /api/badge/USERNAME.svg` is a small two-tone image: "OSS Tracker" on the left, and "12 merged PRs, #3 all time" on the right, or "OSS Tracker member" before the first merge. It is drawn by hand from fixed words and numbers only. A private, banned or unknown profile gets one neutral badge, "view profile", so the badge never reveals whether an account exists. The image is cached for an hour and has its own, more generous rate limit, because GitHub's image proxy asks for it on every profile view.
+
+The badge line a member puts in their profile README is the image wrapped in a link to their profile here:
+
+```
+[![OSS Tracker](https://YOUR-SITE/api/badge/USERNAME.svg)](https://YOUR-SITE/u/USERNAME)
+```
+
+Until a member has added it, the home page shows a panel with a preview of their badge. It cannot be dismissed, but it never blocks anything else on the site.
+
+**Add it for me.** Login is read-only and stays read-only. Writing to a member's GitHub needs a stronger permission, so it comes from a second, separate GitHub OAuth app, and is asked for only when the member presses the button:
+
+1. `/api/badge/connect` saves a random `state` in a cookie and sends the member to GitHub, asking the badge app for the `public_repo` scope.
+2. GitHub sends them back to `/api/badge/callback`. If they pressed Cancel, or the `state` does not match, nothing happens and the home page says "Nothing was changed on your GitHub."
+3. The server swaps the code for a token and asks GitHub who it belongs to. If it is not the logged-in member's account, nothing is written.
+4. If the member has no repository named exactly like their username, it is created as a public repository with a README.
+5. If the README already has the badge, nothing changes. Otherwise the badge line goes at the very top, followed by a blank line, with the commit message "Add OSS Tracker badge". Everything already there stays exactly as it was. A repository with no README gets a `README.md` with just the line.
+6. Whatever happened, the server then deletes the app's grant for that token, which cancels the permission, and forgets the token. It is never stored, logged or sent to the browser.
+7. The member lands on their profile with "Badge added to your GitHub profile."
+
+"Add it for me" is only offered when both `BADGE_GITHUB_CLIENT_ID` and `BADGE_GITHUB_CLIENT_SECRET` are set and `APP_URL` is not a localhost address, because a badge pointing at localhost would show as broken on GitHub. Otherwise the panel shows the badge line with a Copy button and three short steps.
+
+**I already added it myself.** This link reads the member's public profile README with their normal read-only login token and looks for their badge address. Only when it is there is the badge marked as added.
+
 ### What counts
 
 One rule produces every number on the site, so profiles, the leaderboard and the feed always agree. A pull request counts if it is merged, an admin has not excluded it, and its repo is not blocked. Banned members and private profiles are left out of the leaderboard, the feed and the public totals.
@@ -105,6 +132,10 @@ One rule produces every number on the site, so profiles, the leaderboard and the
 | A member uses up the free AI allowance | 3 summaries per member per day, small inputs, and the AI never rewrites a saved summary. Editing one never calls the AI |
 | A mentor's private Meet link leaks | It is sent only to admins and to the member with a confirmed session. Links that are not `https://meet.google.com/...` are rejected |
 | A member books every mentor | One open session per mentor and at most 2 in total |
+| "Add it for me" gets more access than it needs | It uses a separate OAuth app with only the `public_repo` scope, asked for only when the member presses the button. The token is used once, never stored, logged or sent to the browser, and the grant is deleted on success and on every failure |
+| A member approves "Add it for me" while logged in to GitHub as someone else | The server checks the token belongs to the logged-in member's GitHub account, and writes nothing if not |
+| A forged badge callback | The same `state` check as login |
+| The badge reveals private accounts or carries injected text | Private, banned and unknown profiles get one identical neutral badge, and the SVG holds only fixed words and numbers |
 | A mistaken or bad admin action | Every admin action is logged, and owners cannot be changed from the panel |
 
 ## Run it locally
@@ -129,6 +160,8 @@ You need Node 20 or newer, a MongoDB Atlas database and a GitHub OAuth app.
    ```
 5. Open `http://localhost:5173` and log in.
 
+On your laptop, "Add it for me" on the badge panel stays off, because `APP_URL` is localhost. The panel shows the copy line instead.
+
 To see the site with made-up members before real people join, run `npm run seed` inside `server/`. Remove them again with `npm run seed:clear`.
 
 ### Admins
@@ -143,11 +176,15 @@ The site runs as one web service plus a hosted database. These steps use Render 
 2. **A second GitHub OAuth app.** An OAuth app allows one callback address, so the live site needs its own.
    - Homepage URL: `https://YOUR-SITE`
    - Authorization callback URL: `https://YOUR-SITE/api/auth/github/callback`
-3. **The web service.** Create it from this repo with:
+3. **The badge OAuth app (optional).** This turns on "Add it for me" for the profile badge. It must be a separate OAuth app from the login one, because it asks for permission to write to public repos.
+   - Application name: something members will recognise, for example `OSS Tracker badge`
+   - Homepage URL: `https://YOUR-SITE`
+   - Authorization callback URL: `https://YOUR-SITE/api/badge/callback`
+4. **The web service.** Create it from this repo with:
    - Build command: `npm run build`
    - Start command: `npm start`
    - Health check path: `/api/health`
-4. **Settings.** Add these environment variables:
+5. **Settings.** Add these environment variables:
 
    | Name | Value |
    |---|---|
@@ -162,6 +199,8 @@ The site runs as one web service plus a hosted database. These steps use Render 
    | `AI_API_KEY` | optional, turns on pull request summaries. Free key at https://console.groq.com/keys |
    | `AI_API_URL` | optional, defaults to `https://api.groq.com/openai/v1/chat/completions` |
    | `SUMMARY_MODEL` | optional, defaults to `openai/gpt-oss-120b` |
+   | `BADGE_GITHUB_CLIENT_ID` | optional, from the badge OAuth app in step 3 |
+   | `BADGE_GITHUB_CLIENT_SECRET` | optional, from the badge OAuth app in step 3 |
 
 Before inviting people:
 
@@ -186,7 +225,7 @@ server/            the API (Express + MongoDB)
   src/index.js       starts everything
   src/app.js         middleware and routes, in order
   src/routes/        one file per group of URLs
-  src/services/      GitHub and AI calls, sync, summaries, and all the counting
+  src/services/      GitHub and AI calls, sync, summaries, the badge, and all the counting
   src/models/        what is stored in the database
   src/middleware/    login checks, rate limits, error handling
   src/jobs/          the background sync

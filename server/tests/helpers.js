@@ -37,6 +37,11 @@ export const github = {
   issues: {}, // "owner/repo#5" -> { title, body }
   repoCalls: [], // every PR, files and issue call the app made
   failRepoCallsWith: null, // set to a status code to make PR, files and issue calls fail
+  repos: {}, // "owner/repo" (lowercase) -> { readme: { path, text } or null }, for the profile badge
+  writes: [], // every repo created and file saved: { kind, repo, path, text, sha, message }
+  failWritesWith: null, // set to a status code to make creating repos and saving files fail
+  tokenExchanges: [], // every code swapped for a token: { clientId, code }
+  grantsDeleted: [], // every cancelled permission: { clientId, clientSecret, token }
   reset() {
     this.profiles = {};
     this.prs = {};
@@ -47,6 +52,11 @@ export const github = {
     this.issues = {};
     this.repoCalls = [];
     this.failRepoCallsWith = null;
+    this.repos = {};
+    this.writes = [];
+    this.failWritesWith = null;
+    this.tokenExchanges = [];
+    this.grantsDeleted = [];
   },
 };
 
@@ -106,6 +116,51 @@ function fakeRepoCall(path) {
   return json(github.prDetails[key] || { title: item?.title || "A PR", body: "" });
 }
 
+// Answers the calls the profile badge makes: does the repo exist, create
+// it, read its README, save a file. Returns null for any other address.
+let nextSha = 1;
+function fakeProfileRepoCall(path, options, profile) {
+  const method = options.method || "GET";
+
+  if (path === "/user/repos" && method === "POST") {
+    if (!profile) return json({ message: "Bad credentials" }, 401);
+    if (github.failWritesWith) return json({ message: "nope" }, github.failWritesWith);
+    const { name, private: isPrivate, auto_init: autoInit } = JSON.parse(options.body);
+    const key = `${profile.login}/${name}`.toLowerCase();
+    if (github.repos[key]) return json({ message: "name already exists on this account" }, 422);
+    github.repos[key] = { readme: autoInit ? { path: "README.md", text: `# ${name}\n`, sha: `sha-${nextSha++}` } : null };
+    github.writes.push({ kind: "create_repo", repo: key, private: isPrivate });
+    return json({ full_name: `${profile.login}/${name}` }, 201);
+  }
+
+  const match = path.match(/^\/repos\/([^/]+)\/([^/]+)(?:\/(readme)|\/contents\/(.+))?$/);
+  if (!match) return null;
+  const [, owner, name, readme, filePath] = match;
+  const key = `${owner}/${name}`.toLowerCase();
+  const repo = github.repos[key];
+
+  if (!readme && !filePath) return repo ? json({ full_name: key }) : json({ message: "Not Found" }, 404);
+
+  if (readme) {
+    if (!repo?.readme) return json({ message: "Not Found" }, 404);
+    const { path: readmePath, text, sha } = repo.readme;
+    return json({ type: "file", encoding: "base64", path: readmePath, sha, content: Buffer.from(text).toString("base64") });
+  }
+
+  // PUT /contents/<path>: only the owner can write, and replacing a file needs its sha.
+  if (!profile || profile.login.toLowerCase() !== owner.toLowerCase()) return json({ message: "Not Found" }, 404);
+  if (github.failWritesWith) return json({ message: "nope" }, github.failWritesWith);
+  if (!repo) return json({ message: "Not Found" }, 404);
+  const body = JSON.parse(options.body);
+  const decodedPath = decodeURIComponent(filePath);
+  const existing = repo.readme && repo.readme.path === decodedPath ? repo.readme : null;
+  if (existing && body.sha !== existing.sha) return json({ message: "sha wasn't supplied" }, 422);
+  const text = Buffer.from(body.content, "base64").toString("utf8");
+  if (/^readme\.md$/i.test(decodedPath)) repo.readme = { path: decodedPath, text, sha: `sha-${nextSha++}` };
+  github.writes.push({ kind: "save_file", repo: key, path: decodedPath, text, sha: body.sha, message: body.message });
+  return json({ content: { path: decodedPath } }, existing ? 200 : 201);
+}
+
 // Answers in the OpenAI-compatible chat completions shape that Groq uses.
 function fakeAi(options) {
   ai.calls.push(JSON.parse(options.body));
@@ -139,12 +194,26 @@ export function fakeGithub() {
     // Login: code -> token. The code "bad" is rejected; any other code
     // becomes the token "token-for-<code>".
     if (target.pathname === "/login/oauth/access_token") {
-      const { code } = JSON.parse(options.body);
+      const { code, client_id: clientId } = JSON.parse(options.body);
+      github.tokenExchanges.push({ clientId, code });
       if (code === "bad") return json({ error: "bad_verification_code" });
       return json({ access_token: `token-for-${code}` });
     }
 
+    // Cancelling a permission is signed with the app's id and secret.
+    const grant = target.pathname.match(/^\/applications\/([^/]+)\/grant$/);
+    if (grant && options.method === "DELETE") {
+      const basic = (options.headers?.Authorization || "").replace("Basic ", "");
+      const [clientId, clientSecret] = Buffer.from(basic, "base64").toString("utf8").split(":");
+      if (clientId !== decodeURIComponent(grant[1])) return json({ message: "Not Found" }, 404);
+      github.grantsDeleted.push({ clientId, clientSecret, token: JSON.parse(options.body).access_token });
+      return new Response(null, { status: 204 });
+    }
+
     const token = (options.headers?.Authorization || "").replace("Bearer ", "");
+
+    const profileRepo = fakeProfileRepoCall(target.pathname, options, github.profiles[token]);
+    if (profileRepo) return profileRepo;
 
     if (target.pathname === "/user") {
       const profile = github.profiles[token];
@@ -190,6 +259,14 @@ export function githubAccount(login, extra = {}) {
   github.profiles[`token-for-${login}`] = profile;
   github.prs[login.toLowerCase()] = [];
   return profile;
+}
+
+// Makes the login code `code` give a token that belongs to the GitHub
+// account `login`, as when a member approves "Add it for me" on GitHub.
+export function writeAccessCode(code, login) {
+  const profile = Object.values(github.profiles).find((p) => p.login === login);
+  github.profiles[`token-for-${code}`] = profile;
+  return code;
 }
 
 // Builds one search result the way GitHub sends it.

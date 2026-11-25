@@ -453,6 +453,61 @@ textarea {
   margin-top: 3rem;
 }
 
+/* The GitHub badge panel at the top of the home page, and the same
+   pieces in "Your GitHub badge" on the member's own profile. */
+.badge-panel {
+  margin-bottom: 2.5rem;
+  padding: 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--merge);
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+.badge-panel h2 {
+  margin: 0.75rem 0;
+}
+
+.badge-preview {
+  display: block;
+  max-width: 100%;
+  height: 20px;
+}
+
+.badge-note {
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  max-width: 34rem;
+}
+
+.badge-steps {
+  margin: 0.75rem 0;
+  padding-left: 1.3rem;
+  max-width: 34rem;
+}
+
+.badge-check {
+  margin: 0.5rem 0 0;
+  font-size: 0.9rem;
+}
+
+/* A button that looks like a link, for small actions inside text. */
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--merge);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+  cursor: pointer;
+}
+
+.link-button:disabled {
+  color: var(--ink-soft);
+  cursor: default;
+}
+
 /*
   The merge graph. Read it like a git history:
   - .graph::before       the main line running down the page

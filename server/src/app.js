@@ -16,6 +16,7 @@ import { usersRouter } from "./routes/users.js";
 import { publicRouter } from "./routes/public.js";
 import { adminRouter } from "./routes/admin.js";
 import { mentorsRouter } from "./routes/mentors.js";
+import { badgeImageRouter, badgeRouter } from "./routes/badge.js";
 
 export const app = express();
 
@@ -47,6 +48,9 @@ app.use(cookieParser());
 
 // ---------- API ----------
 
+// Badge images come first, with their own rate limit (see routes/badge.js).
+app.use("/api/badge", badgeImageRouter);
+
 app.use("/api", apiLimiter);
 
 // Hosting platforms ping this to check the server is alive.
@@ -59,6 +63,7 @@ app.use("/api/me", meRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/mentors", mentorsRouter);
+app.use("/api/badge", badgeRouter);
 app.use("/api", publicRouter);
 app.use("/api", notFound);
 

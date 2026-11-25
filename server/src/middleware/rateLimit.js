@@ -16,5 +16,7 @@ function limiter(limit, windowMinutes) {
 
 // Everything under /api.
 export const apiLimiter = limiter(300, 15);
+// Badge images. GitHub's image proxy asks for them on every profile view.
+export const badgeLimiter = limiter(3000, 15);
 // Login routes get a tighter limit.
 export const authLimiter = limiter(30, 15);

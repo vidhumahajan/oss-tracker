@@ -8,9 +8,18 @@ export default function Privacy() {
       <h2>What we read from GitHub</h2>
       <p>
         When you log in, GitHub tells us your username, display name and profile picture. We then
-        search GitHub for pull requests you opened in public repositories. We ask GitHub for no
-        extra permissions, so we cannot see private repositories, and we cannot change anything on
-        your account.
+        search GitHub for pull requests you opened in public repositories. Logging in asks GitHub
+        for no extra permissions, so we cannot see private repositories, and we cannot change
+        anything on your account.
+      </p>
+
+      <h2>Your GitHub badge</h2>
+      <p>
+        If you choose Add it for me, GitHub asks you separately for permission to write to your
+        public repositories. We use it once, to add the badge line to the top of the README in
+        your profile repository (the one named like your username), creating that repository if
+        you do not have one. Then we cancel the permission straight away. We never store it. The
+        badge itself shows only your merged pull request count and rank.
       </p>
 
       <h2>What we store</h2>

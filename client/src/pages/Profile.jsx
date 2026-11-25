@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api.js";
 import { useApi } from "../useApi.js";
 import { useAuth } from "../auth.jsx";
@@ -7,6 +7,7 @@ import { number, plural, shortDate, timeAgo } from "../format.js";
 import Avatar from "../components/Avatar.jsx";
 import ActivityChart from "../components/ActivityChart.jsx";
 import PrList from "../components/PrList.jsx";
+import BadgePanel from "../components/BadgePanel.jsx";
 import NotFound from "./NotFound.jsx";
 
 export default function Profile() {
@@ -15,6 +16,8 @@ export default function Profile() {
   const { data, error, loading, reload } = useApi(`/users/${login}`);
   const [sync, setSync] = useState({ busy: false, message: "", failed: false });
   const [listKey, setListKey] = useState(0);
+  // "Add it for me" sends the member here with ?badge=added when it worked.
+  const [params] = useSearchParams();
 
   if (error?.status === 404) {
     return <NotFound title="Profile not found" text="This profile does not exist or is private." />;
@@ -59,6 +62,11 @@ export default function Profile() {
         )}
       </header>
 
+      {isSelf && params.get("badge") === "added" && (
+        <p className="status status-ok" role="status">
+          Badge added to your GitHub profile.
+        </p>
+      )}
       {user.banned && <p className="status status-error">This account is banned. Only admins can see this page.</p>}
       {!user.isPublic && (
         <p className="status">
@@ -121,6 +129,8 @@ export default function Profile() {
           )}
         </section>
       </div>
+
+      {isSelf && <BadgePanel login={user.login} place="profile" />}
 
       <h2>Pull requests</h2>
       <PrList key={`${user.login}-${listKey}`} login={user.login} onScoreChange={reload} />

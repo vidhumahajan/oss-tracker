@@ -50,6 +50,13 @@ export const config = {
   aiApiUrl: process.env.AI_API_URL || "https://api.groq.com/openai/v1/chat/completions",
   summaryModel: process.env.SUMMARY_MODEL || "openai/gpt-oss-120b",
 
+  // Optional. A second GitHub OAuth app, used only by "Add it for me" on
+  // the badge panel. It is separate from the login app because it asks for
+  // permission to write to public repos, which login must never have.
+  // Without both values, members copy the badge line by hand instead.
+  badgeClientId: process.env.BADGE_GITHUB_CLIENT_ID || "",
+  badgeClientSecret: process.env.BADGE_GITHUB_CLIENT_SECRET || "",
+
   isProduction: process.env.NODE_ENV === "production",
   isTest: process.env.NODE_ENV === "test",
   // Set SYNC_ENABLED=false to stop the background sync, for example while debugging.

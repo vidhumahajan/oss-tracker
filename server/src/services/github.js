@@ -6,12 +6,14 @@ import { HttpError, GithubError } from "../utils/httpError.js";
 
 const API = "https://api.github.com";
 
+// Without a token, GitHub still answers public reads, with a lower rate limit.
 function apiHeaders(githubToken) {
-  return {
-    Authorization: `Bearer ${githubToken}`,
+  const headers = {
     Accept: "application/vnd.github+json",
     "User-Agent": "oss-tracker",
   };
+  if (githubToken) headers.Authorization = `Bearer ${githubToken}`;
+  return headers;
 }
 
 // Turns a failed GitHub response into the right kind of error.
@@ -33,8 +35,11 @@ function throwForStatus(response, what) {
   throw new GithubError("failed", 502, `GitHub ${what} failed (status ${response.status}).`);
 }
 
+// The login app's id and secret. The badge app (routes/badge.js) passes its own.
+const loginApp = { clientId: config.githubClientId, clientSecret: config.githubClientSecret };
+
 // Login step 2: swap the one-time code for an access token.
-export async function exchangeCodeForToken(code) {
+export async function exchangeCodeForToken(code, app = loginApp) {
   const response = await fetch("https://github.com/login/oauth/access_token", {
     method: "POST",
     headers: {
@@ -42,8 +47,8 @@ export async function exchangeCodeForToken(code) {
       Accept: "application/json",
     },
     body: JSON.stringify({
-      client_id: config.githubClientId,
-      client_secret: config.githubClientSecret,
+      client_id: app.clientId,
+      client_secret: app.clientSecret,
       code,
     }),
   });
@@ -129,4 +134,69 @@ export async function fetchIssue(githubToken, repoFullName, number) {
   if (response.status === 404 || response.status === 410) return null;
   if (!response.ok) throwForStatus(response, "issue request");
   return response.json();
+}
+
+// ---------- The profile badge (services/badge.js) ----------
+// Docs: https://docs.github.com/en/rest/repos/repos and
+// https://docs.github.com/en/rest/repos/contents
+
+// Does this repository exist? true or false.
+export async function repoExists(githubToken, owner, repo) {
+  const response = await fetch(repoPath(`${owner}/${repo}`), { headers: apiHeaders(githubToken) });
+  if (response.status === 404) return false;
+  if (!response.ok) throwForStatus(response, "repository request");
+  return true;
+}
+
+// Creates a public repository for the token's owner. auto_init gives it
+// a first commit with a short README.md.
+export async function createPublicRepo(githubToken, name) {
+  const response = await fetch(`${API}/user/repos`, {
+    method: "POST",
+    headers: { ...apiHeaders(githubToken), "Content-Type": "application/json" },
+    body: JSON.stringify({ name, private: false, auto_init: true }),
+  });
+  if (!response.ok) throwForStatus(response, "create repository");
+}
+
+// The repository's README as { path, text, sha }, or null if it has none.
+// GitHub sends the file as base64.
+export async function fetchReadme(githubToken, owner, repo) {
+  const response = await fetch(`${repoPath(`${owner}/${repo}`)}/readme`, { headers: apiHeaders(githubToken) });
+  if (response.status === 404) return null;
+  if (!response.ok) throwForStatus(response, "README request");
+  const data = await response.json();
+  return { path: data.path, text: Buffer.from(data.content || "", "base64").toString("utf8"), sha: data.sha };
+}
+
+// Creates a file, or replaces it when sha (the current version's id) is given.
+export async function saveFile(githubToken, owner, repo, { path, text, sha, message }) {
+  const body = { message, content: Buffer.from(text, "utf8").toString("base64") };
+  if (sha) body.sha = sha;
+  const filePath = path.split("/").map(encodeURIComponent).join("/");
+  const response = await fetch(`${repoPath(`${owner}/${repo}`)}/contents/${filePath}`, {
+    method: "PUT",
+    headers: { ...apiHeaders(githubToken), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throwForStatus(response, "save file");
+}
+
+// Cancels everything the member allowed an OAuth app to do: the token
+// stops working and the app disappears from their GitHub settings.
+// This call proves who we are with the app's id and secret, not the token.
+// Docs: https://docs.github.com/en/rest/apps/oauth-applications#delete-an-app-authorization
+export async function deleteAppGrant({ clientId, clientSecret }, githubToken) {
+  const basic = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+  const response = await fetch(`${API}/applications/${encodeURIComponent(clientId)}/grant`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Basic ${basic}`,
+      Accept: "application/vnd.github+json",
+      "User-Agent": "oss-tracker",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ access_token: githubToken }),
+  });
+  if (!response.ok) throwForStatus(response, "cancel permission");
 }

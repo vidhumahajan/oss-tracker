@@ -33,6 +33,10 @@ const userSchema = new mongoose.Schema(
     // A window opens with the first summary and lasts 24 hours.
     summaryWindowStart: Date,
     summaryCount: { type: Number, default: 0 },
+
+    // When the GitHub profile badge was added, by "Add it for me" or by the
+    // member themselves. Until then the home page shows the badge panel.
+    badgeAddedAt: Date,
   },
   { timestamps: true } // adds createdAt and updatedAt automatically
 );
