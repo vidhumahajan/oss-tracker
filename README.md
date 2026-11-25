@@ -59,7 +59,7 @@ A summary is written once per merged pull request and saved on it, because a mer
 - The server collects the pull request's title, description and changed files from GitHub with the member's own token, plus the issue it fixes when the description says "fixes #N", "closes #N" or "resolves #N".
 - To keep each request small, descriptions are cut to 3000 characters, at most 15 files are sent, the diffs together are cut to about 12000 characters, and lock, minified and generated files are left out.
 - The AI is told that all of this is untrusted material to summarise, never instructions. It must answer in a fixed JSON shape, and every field is checked for type and length before anything is saved. A reply that fails the check is thrown away (502).
-- Each member can ask for 10 summaries in 24 hours, counted from their first one.
+- Each member can ask for 10 summaries in 24 hours, counted from their first one. An attempt that fails before the AI is called, for example because GitHub refused, does not count. One that reaches the AI does, even if it then fails.
 - Without `ANTHROPIC_API_KEY`, the button is hidden and the route answers 503.
 
 ### Mentors and sessions

@@ -139,12 +139,50 @@ test("each member can write 10 summaries a day", async () => {
   assert.equal(res.status, 429);
   assert.equal(res.body.error.message, "You can write 10 summaries a day. You can write more in 23 hours.");
   assert.equal(ai.calls.length, 0);
+  // A member at the limit is stopped before GitHub is asked anything.
+  assert.equal(github.repoCalls.length, 0);
 
   // A day later the count starts again.
   const dayAgo = new Date(Date.now() - 25 * 60 * 60 * 1000);
   await User.updateOne({ _id: alice.user._id }, { summaryWindowStart: dayAgo });
   assert.equal((await alice.agent.post(url)).status, 200);
   assert.equal((await User.findById(alice.user._id)).summaryCount, 1);
+});
+
+test("a failure before the AI is called does not count toward the daily limit", async () => {
+  const { alice, url } = await setup();
+  const count = async () => (await User.findById(alice.user._id)).summaryCount;
+
+  // GitHub refuses: rate limited, then a server error.
+  for (const status of [403, 500]) {
+    github.failRepoCallsWith = status;
+    const res = await alice.agent.post(url);
+    assert.notEqual(res.status, 200);
+    assert.equal(ai.calls.length, 0);
+    assert.equal(await count(), 0, `after GitHub answered ${status}`);
+  }
+  // No 24-hour window was started either.
+  assert.equal((await User.findById(alice.user._id)).summaryWindowStart, undefined);
+
+  // Once GitHub answers again, the first real summary is the first one counted.
+  github.failRepoCallsWith = null;
+  assert.equal((await alice.agent.post(url)).status, 200);
+  assert.equal(await count(), 1);
+});
+
+test("an attempt that reached the AI counts even when it fails", async () => {
+  const { alice, url } = await setup();
+  const count = async () => (await User.findById(alice.user._id)).summaryCount;
+
+  ai.status = 529; // the AI service is busy
+  assert.equal((await alice.agent.post(url)).status, 503);
+  assert.equal(await count(), 1);
+
+  ai.status = 200;
+  ai.reply = "this is not JSON"; // the reply fails the checks
+  assert.equal((await alice.agent.post(url)).status, 502);
+  assert.equal(await count(), 2);
+  assert.equal(ai.calls.length, 2);
 });
 
 test("an AI reply that is not valid gives 502 and saves nothing", async () => {

@@ -36,6 +36,7 @@ export const github = {
   prFiles: {}, // "owner/repo#12" -> list of changed files
   issues: {}, // "owner/repo#5" -> { title, body }
   repoCalls: [], // every PR, files and issue call the app made
+  failRepoCallsWith: null, // set to a status code to make PR, files and issue calls fail
   reset() {
     this.profiles = {};
     this.prs = {};
@@ -45,6 +46,7 @@ export const github = {
     this.prFiles = {};
     this.issues = {};
     this.repoCalls = [];
+    this.failRepoCallsWith = null;
   },
 };
 
@@ -157,6 +159,7 @@ export function fakeGithub() {
 
     if (target.pathname.startsWith("/repos/")) {
       if (!github.profiles[token]) return json({ message: "Bad credentials" }, 401);
+      if (github.failRepoCallsWith) return json({ message: "nope" }, github.failRepoCallsWith);
       const answer = fakeRepoCall(target.pathname);
       if (answer) return answer;
     }

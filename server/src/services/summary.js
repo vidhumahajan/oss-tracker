@@ -50,6 +50,25 @@ function waitText(ms) {
   return `${hours} ${hours === 1 ? "hour" : "hours"}`;
 }
 
+function limitError(windowStart, now) {
+  const waitMs = windowStart.getTime() + DAY_MS - now.getTime();
+  return new HttpError(
+    429,
+    `You can write ${SUMMARIES_PER_DAY} summaries a day. You can write more in ${waitText(waitMs)}.`
+  );
+}
+
+// Throws 429 if today's summaries are used up, without using one. Lets a
+// member at the limit stop before we spend their GitHub rate limit.
+async function checkDailyLimit(userId) {
+  const now = new Date();
+  const user = await User.findById(userId);
+  const windowOpen = user.summaryWindowStart && user.summaryWindowStart >= new Date(now - DAY_MS);
+  if (windowOpen && user.summaryCount >= SUMMARIES_PER_DAY) {
+    throw limitError(user.summaryWindowStart, now);
+  }
+}
+
 // Uses up one of the member's summaries for today, or throws 429.
 // Each step is a single database update, so two requests at the same
 // moment cannot both take the last place.
@@ -71,11 +90,7 @@ async function useDailySlot(userId) {
   if (updated) return;
 
   const user = await User.findById(userId);
-  const waitMs = user.summaryWindowStart.getTime() + DAY_MS - now.getTime();
-  throw new HttpError(
-    429,
-    `You can write ${SUMMARIES_PER_DAY} summaries a day. You can write more in ${waitText(waitMs)}.`
-  );
+  throw limitError(user.summaryWindowStart, now);
 }
 
 // ---------- Collecting the material ----------
@@ -255,11 +270,14 @@ export async function writeSummary(pr, user) {
     }
     const githubToken = decrypt(withToken.githubToken);
 
-    // Counted before the AI call, so a failed attempt still counts. That keeps
-    // the cost of the feature predictable.
-    await useDailySlot(user._id);
-
+    await checkDailyLimit(user._id);
     const material = await gatherMaterial(githubToken, pr);
+
+    // Counted only now, just before the AI call. A failure before this point
+    // (for example GitHub refusing) cost nothing, so it does not count. Once
+    // the AI is called the attempt counts even if it fails, because the call
+    // cost money.
+    await useDailySlot(user._id);
     const reply = await askForJson({
       system: SYSTEM,
       prompt: `<material>\n${materialText(material, pr)}\n</material>`,
