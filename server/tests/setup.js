@@ -21,6 +21,8 @@ process.env.SUMMARY_MODEL = "test-model";
 process.env.SMTP_HOST = "smtp.test";
 process.env.SMTP_USER = "sender@test.example";
 process.env.SMTP_PASS = "test-password";
+// Brevo is off unless a test turns it on, even if your own .env has a key.
+process.env.BREVO_API_KEY = "";
 process.env.MAIL_FROM = "OSS Tracker <sender@test.example>";
 process.env.ADMIN_EMAIL = "admins@test.example";
 process.env.TIME_ZONE = "Asia/Kolkata";

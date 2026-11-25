@@ -29,7 +29,7 @@ There are three pieces:
 2. **The API** (`server/`) answers the React app's requests, talks to GitHub and the AI service, and reads and writes the database.
 3. **MongoDB** stores users, pull requests (with their summaries), blocked repos, announcements, mentors, session requests and the admin log.
 
-Two outside services are optional: an SMTP account for session emails, and a second GitHub OAuth app for the profile badge.
+Two outside services are optional: an email sender for session emails (a Brevo API key or an SMTP account), and a second GitHub OAuth app for the profile badge.
 
 It is a monolith: one server holds every feature. Once deployed, that server also serves the built React files, so the whole product lives on one address. During development, Vite serves the React app and forwards every `/api` request to the server. Either way the browser talks to a single address, so there is no CORS setup.
 
@@ -91,7 +91,7 @@ An admin can move a confirmed session to a new time with Change time on the admi
 
 ### Session emails
 
-All sending is in `server/src/services/mail.js`, using [nodemailer](https://nodemailer.com) and any SMTP account. What each email says is in `server/src/services/sessionMail.js`. Emails are plain text. Dates and times are written in `TIME_ZONE` (India Standard Time by default), with the zone named.
+All sending is in `server/src/services/mail.js`. It sends one of two ways: through [Brevo](https://www.brevo.com)'s HTTP API when `BREVO_API_KEY` is set, or otherwise through any SMTP account with [nodemailer](https://nodemailer.com). See "Sending email" below for which to pick. What each email says is in `server/src/services/sessionMail.js`. Emails are plain text. Dates and times are written in `TIME_ZONE` (India Standard Time by default), with the zone named.
 
 | When | Who gets an email |
 |---|---|
@@ -107,7 +107,7 @@ Rules:
 
 - **No Meet link in member emails.** They link to the Mentors page, where the member sees the link after logging in. If a member typed a wrong address, the link stays private.
 - **Addresses are private.** Members give an address when they request a session, and mentors have an optional one set by admins. Both appear only in admin answers, never in the public mentor list or to other members, and never in the server log. Deleting an account deletes its sessions and their addresses.
-- **Email never breaks the site.** Without the SMTP settings nothing is sent, one line is logged, and everything else works as before. A failed send is logged and the request that caused it still succeeds.
+- **Email never breaks the site.** Without `BREVO_API_KEY` or the SMTP settings nothing is sent, one line is logged, and everything else works as before. A failed send is logged and the request that caused it still succeeds.
 - **Reminders go out once.** `server/src/jobs/reminderLoop.js` runs once a minute, like the sync. When a reminder is sent, the time is saved on the session, so a restart never sends it twice. If the server was down at the exact moment, the 30 minute reminder still goes out as long as the session has not started, and the start reminder goes out up to 10 minutes late, then is skipped. Moving a session to a new time clears both, so they go out again for the new time.
 - **The count on the Mentors link** is the member's sessions that an admin changed (status or time) since the member last opened the Mentors page. Opening the page clears it. A member's own request or cancel does not count.
 
@@ -163,7 +163,7 @@ One rule produces every number on the site, so profiles, the leaderboard and the
 | A member books every mentor | One open session per mentor and at most 2 in total |
 | Members' and mentors' email addresses leak | They are returned only in admin answers and never logged. Deleting an account deletes them |
 | A member types someone else's email address | Emails never contain the Meet link, only a link to the Mentors page, which needs the member's login |
-| A mail server problem slows or breaks the site | Email is optional, failures are logged and never fail the request, and SMTP calls give up after a few seconds |
+| A mail server problem slows or breaks the site | Email is optional, failures are logged and never fail the request, SMTP calls give up after a few seconds and Brevo calls after 10 seconds |
 | A name with a line break adds email headers | Subjects are squeezed onto one line before sending |
 | "Add it for me" gets more access than it needs | It uses a separate OAuth app with only the `public_repo` scope, asked for only when the member presses the button. The token is used once, never stored, logged or sent to the browser, and the grant is deleted on success and on every failure |
 | A member approves "Add it for me" while logged in to GitHub as someone else | The server checks the token belongs to the logged-in member's GitHub account, and writes nothing if not |
@@ -234,15 +234,44 @@ The site runs as one web service plus a hosted database. These steps use Render 
    | `SUMMARY_MODEL` | optional, defaults to `openai/gpt-oss-120b` |
    | `BADGE_GITHUB_CLIENT_ID` | optional, from the badge OAuth app in step 3 |
    | `BADGE_GITHUB_CLIENT_SECRET` | optional, from the badge OAuth app in step 3 |
-   | `SMTP_HOST` | optional, turns on session emails. For Gmail: `smtp.gmail.com` (see "Sending email" below) |
+   | `BREVO_API_KEY` | optional, turns on session emails through Brevo's HTTP API. Use this on hosts that block SMTP. When set, the SMTP settings are ignored (see "Sending email" below) |
+   | `SMTP_HOST` | optional, turns on session emails over SMTP. For Gmail: `smtp.gmail.com` (see "Sending email" below) |
    | `SMTP_PORT` | optional, defaults to `587` |
    | `SMTP_USER` | optional, the email account that sends |
    | `SMTP_PASS` | optional, its password. For Gmail, an app password |
-   | `MAIL_FROM` | optional, the From line, for example `OSS Tracker <you@gmail.com>`. Defaults to `SMTP_USER` |
+   | `MAIL_FROM` | the From line, for example `OSS Tracker <you@gmail.com>`. Needed with Brevo. With SMTP it defaults to `SMTP_USER` |
    | `ADMIN_EMAIL` | optional, where new requests and admin reminders go |
    | `TIME_ZONE` | optional, the time zone for times in emails. Defaults to `Asia/Kolkata` |
 
 ### Sending email
+
+There are two ways to send, and the server picks one by itself:
+
+| Mode | When it is used | Good for |
+|---|---|---|
+| Brevo HTTP API | `BREVO_API_KEY` is set. Every email goes through Brevo and the SMTP settings are ignored | Hosts that block SMTP ports (25, 465, 587), which many free hosting plans do. It sends over HTTPS on port 443 like any web request |
+| SMTP | `BREVO_API_KEY` is empty and `SMTP_HOST`, `SMTP_USER` and `SMTP_PASS` are set | Your laptop, or any host that allows outgoing SMTP |
+
+With neither, no email is sent and the server logs one line about it. Both modes use `MAIL_FROM` for the sender name and address.
+
+If session emails work on your laptop but fail once deployed with a timeout or "connection refused" in the `Email "` log line, your host is blocking SMTP. Switch to Brevo.
+
+#### Brevo (works when SMTP is blocked)
+
+1. **Sign up** at https://www.brevo.com. The free plan has a daily sending limit that is plenty for session emails.
+2. **Add and verify a sender.** In Brevo, open **Settings > Senders, Domains, IPs > Senders** and click **Add a sender**. Enter a From name (for example `OSS Tracker`) and the From email you want to send from, then click **Save**. Brevo emails a 6-digit code to that address. Paste it in and click **Verify sender**. Brevo refuses to send from an address that is not verified.
+3. **Create an API key.** In Brevo, open **SMTP & API** from the settings menu, go to the **API keys** tab and click **Generate a new API key**. Give it a name such as `OSS Tracker` and copy the key, which starts with `xkeysib-`. It is shown only once.
+4. **Add the settings**, with the exact address you verified in `MAIL_FROM`:
+   ```
+   BREVO_API_KEY=xkeysib-the key you copied
+   MAIL_FROM=OSS Tracker <the-address-you-verified@example.com>
+   ADMIN_EMAIL=your own address
+   ```
+5. **Restart the server** and request a session yourself. The admin email should arrive within a minute. If it does not, the server log has a line starting with `Email "` with Brevo's status code and message. A 401 means the key is wrong. A 400 about the sender means `MAIL_FROM` does not match a verified sender.
+
+A sender on a free address such as Gmail works, but some inboxes mark it as spam because Brevo cannot sign for gmail.com. If you own a domain, authenticate it on the **Domains** tab of the same Brevo page for better delivery. If the key leaks, delete it on the **API keys** tab and generate a new one.
+
+#### SMTP
 
 Any SMTP account works. These steps use a Gmail account, which can send a few hundred emails a day for free. That is plenty for session emails. A separate Gmail account just for the site keeps your own inbox out of it.
 

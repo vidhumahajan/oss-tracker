@@ -93,6 +93,18 @@ export const ai = {
   },
 };
 
+// The state of our pretend Brevo. Only used by tests that set a BREVO_API_KEY.
+export const brevo = {
+  calls: [], // every request: { url, apiKey, body, signal }
+  status: 201,
+  errorMessage: "nope", // the error message sent with a status other than 201
+  reset() {
+    this.calls = [];
+    this.status = 201;
+    this.errorMessage = "nope";
+  },
+};
+
 function json(body, status = 200) {
   return new Response(JSON.stringify(body), { status });
 }
@@ -184,14 +196,23 @@ function fakeAi(options) {
   });
 }
 
-// Replaces fetch so no test ever calls the real GitHub or the real AI service.
+// Answers like Brevo's send email endpoint: a messageId, or { code, message }.
+function fakeBrevo(url, options) {
+  brevo.calls.push({ url: String(url), apiKey: options.headers?.["api-key"], body: JSON.parse(options.body), signal: options.signal });
+  if (brevo.status !== 201) return json({ code: "invalid_parameter", message: brevo.errorMessage }, brevo.status);
+  return json({ messageId: "<test@relay.brevo.test>" }, 201);
+}
+
+// Replaces fetch so no test ever calls the real GitHub, AI service or Brevo.
 export function fakeGithub() {
   github.reset();
   ai.reset();
+  brevo.reset();
   mock.method(globalThis, "fetch", async (url, options = {}) => {
     const target = new URL(String(url));
 
     if (target.hostname === "ai.test") return fakeAi(options);
+    if (target.hostname === "api.brevo.com") return fakeBrevo(url, options);
 
     // Login: code -> token. The code "bad" is rejected; any other code
     // becomes the token "token-for-<code>".

@@ -66,14 +66,18 @@ export const config = {
   badgeClientId: process.env.BADGE_GITHUB_CLIENT_ID || "",
   badgeClientSecret: process.env.BADGE_GITHUB_CLIENT_SECRET || "",
 
-  // Optional. The email account that sends session emails (services/mail.js).
-  // Without SMTP_HOST, SMTP_USER and SMTP_PASS, no email is sent and
-  // everything else works as before.
+  // Optional. How session emails are sent (services/mail.js). With
+  // BREVO_API_KEY, every email goes through Brevo's HTTP API, which works on
+  // hosts that block SMTP ports. Without it, the SMTP settings below are
+  // used. With neither, no email is sent and everything else works as before.
+  brevoApiKey: process.env.BREVO_API_KEY || "",
   smtpHost: process.env.SMTP_HOST || "",
   smtpPort: Number(process.env.SMTP_PORT) || 587,
   smtpUser: process.env.SMTP_USER || "",
   smtpPass: process.env.SMTP_PASS || "",
-  // The "From" address. Gmail only allows your own address here.
+  // The "From" line, for example "OSS Tracker <you@example.com>", used in
+  // both modes. Gmail only allows your own address here, and Brevo only
+  // allows a sender you have verified.
   mailFrom: process.env.MAIL_FROM || process.env.SMTP_USER || "",
   // Where new session requests and reminders for the admins go.
   adminEmail: process.env.ADMIN_EMAIL || "",
