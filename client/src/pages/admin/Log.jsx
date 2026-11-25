@@ -15,6 +15,8 @@ const ACTIONS = {
   exclude_pr: "excluded the pull request",
   include_pr: "counted again the pull request",
   delete_summary: "deleted the AI summary of",
+  edit_summary: "edited the AI summary of",
+  restore_summary: "put back the AI's original summary of",
   add_mentor: "added the mentor",
   edit_mentor: "edited the mentor",
   hide_mentor: "hid the mentor",
