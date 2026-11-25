@@ -3,17 +3,18 @@ import { config } from "../config.js";
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
-// A JWT is a signed string that says "this is user X".
+// A JWT is a signed string that says "this is user X, from login Y".
 // Only our server knows the secret, so nobody else can create a valid one.
-export function signToken(userId) {
-  return jwt.sign({ sub: userId }, config.jwtSecret, { expiresIn: "7d" });
+// sid is the sessionId saved on the user at login (see middleware/auth.js).
+export function signToken(userId, sessionId) {
+  return jwt.sign({ sub: userId, sid: sessionId }, config.jwtSecret, { expiresIn: "7d" });
 }
 
-// Returns the user id inside the token.
+// Returns { userId, sessionId } from inside the token.
 // Throws if the token is fake, changed or expired.
 export function verifyToken(token) {
   const payload = jwt.verify(token, config.jwtSecret);
-  return payload.sub;
+  return { userId: payload.sub, sessionId: payload.sid };
 }
 
 // Settings shared by every cookie we set.

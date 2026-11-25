@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { app, request, useDatabase, githubAccount, logIn, User } from "./helpers.js";
+import jwt from "jsonwebtoken";
 import { decrypt } from "../src/utils/crypto.js";
 
 useDatabase();
@@ -150,6 +151,68 @@ test("logout clears the cookie", async () => {
 
   await agent.post("/api/auth/logout");
   assert.equal((await agent.get("/api/auth/me")).body.user, null);
+});
+
+// The login cookie's value, as a browser would send it back.
+function tokenCookie(callback) {
+  return callback.headers["set-cookie"].find((c) => c.startsWith("token=")).split(";")[0];
+}
+
+test("a second login ends the first one, and the first browser is told why", async () => {
+  githubAccount("octo");
+  const first = await logIn("octo");
+  const second = await logIn("octo");
+
+  const firstMe = await first.agent.get("/api/auth/me");
+  assert.deepEqual(firstMe.body, { user: null, reason: "signed_in_elsewhere" });
+  // The old cookie is cleared, so the message is not repeated on every visit.
+  assert.deepEqual((await first.agent.get("/api/auth/me")).body, { user: null });
+
+  assert.equal((await second.agent.get("/api/auth/me")).body.user.login, "octo");
+  assert.equal((await second.agent.patch("/api/me").send({ isPublic: false })).status, 200);
+});
+
+test("an older login cookie cannot call protected routes", async () => {
+  githubAccount("octo");
+  const first = await logIn("octo");
+  const oldCookie = tokenCookie(first.callback);
+  await logIn("octo");
+
+  const res = await request(app).post("/api/me/sync").set("Cookie", oldCookie);
+  assert.equal(res.status, 401);
+  assert.match(res.body.error.message, /logged in on another device/);
+});
+
+test("logging out makes the token useless, even if someone kept a copy", async () => {
+  githubAccount("octo");
+  const { agent, callback } = await logIn("octo");
+  const copied = tokenCookie(callback);
+
+  await agent.post("/api/auth/logout");
+  assert.equal((await User.findOne({ loginLower: "octo" })).sessionId, undefined);
+
+  const me = await request(app).get("/api/auth/me").set("Cookie", copied);
+  assert.deepEqual(me.body, { user: null });
+  assert.equal((await request(app).post("/api/me/sync").set("Cookie", copied)).status, 401);
+});
+
+test("logging out from an older browser does not end the newer login", async () => {
+  githubAccount("octo");
+  const first = await logIn("octo");
+  const second = await logIn("octo");
+
+  await first.agent.post("/api/auth/logout");
+  assert.equal((await second.agent.get("/api/auth/me")).body.user.login, "octo");
+});
+
+test("a token from before sessions existed is not accepted", async () => {
+  githubAccount("octo");
+  await logIn("octo");
+  const user = await User.findOne({ loginLower: "octo" });
+  const oldStyle = jwt.sign({ sub: user.id }, "test-jwt-secret", { expiresIn: "7d" });
+
+  const res = await request(app).get("/api/auth/me").set("Cookie", `token=${oldStyle}`);
+  assert.equal(res.body.user, null);
 });
 
 test("a token for a deleted user stops working", async () => {

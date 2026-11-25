@@ -4,7 +4,7 @@ import { Router } from "express";
 import { config } from "../config.js";
 import { User, publicUser } from "../models/User.js";
 import { exchangeCodeForToken, fetchGithubProfile } from "../services/github.js";
-import { optionalAuth } from "../middleware/auth.js";
+import { optionalAuth, SIGNED_IN_ELSEWHERE } from "../middleware/auth.js";
 import { authLimiter } from "../middleware/rateLimit.js";
 import { encrypt } from "../utils/crypto.js";
 import { signToken, cookieOptions, loginCookieOptions } from "../utils/token.js";
@@ -75,6 +75,9 @@ authRouter.get("/github/callback", authLimiter, async (req, res) => {
     name: profile.name,
     avatarUrl: profile.avatar_url,
     githubToken: encrypt(githubToken),
+    // A fresh value for this login. Saving it makes every older login
+    // cookie for this account stop working (see middleware/auth.js).
+    sessionId: crypto.randomBytes(16).toString("hex"),
   };
   // Usernames listed in ADMIN_LOGINS are always admins.
   if (config.ownerLogins.includes(fields.loginLower)) {
@@ -93,11 +96,16 @@ authRouter.get("/github/callback", authLimiter, async (req, res) => {
   }
 
   // Our own login cookie. From here on the browser proves who it is with this.
-  res.cookie("token", signToken(user.id), loginCookieOptions);
+  res.cookie("token", signToken(user.id, user.sessionId), loginCookieOptions);
   res.redirect(`${config.appUrl}${next}`);
 });
 
-authRouter.post("/logout", (req, res) => {
+authRouter.post("/logout", optionalAuth, async (req, res) => {
+  // Only the current login clears the stored session. A browser holding an
+  // older cookie must not be able to log out the newer one.
+  if (req.user) {
+    await User.updateOne({ _id: req.user._id }, { $unset: { sessionId: 1 } });
+  }
   res.clearCookie("token", cookieOptions);
   res.json({ ok: true });
 });
@@ -105,6 +113,12 @@ authRouter.post("/logout", (req, res) => {
 // Who am I? The React app calls this on load.
 // Answers { user: null } for visitors, which is not an error.
 authRouter.get("/me", optionalAuth, (req, res) => {
+  if (req.loggedOutReason === SIGNED_IN_ELSEWHERE) {
+    // The old cookie is useless now. Clearing it means the message
+    // is shown once, not on every visit.
+    res.clearCookie("token", cookieOptions);
+    return res.json({ user: null, reason: SIGNED_IN_ELSEWHERE });
+  }
   if (!req.user) {
     return res.json({ user: null });
   }

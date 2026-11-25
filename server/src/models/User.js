@@ -15,6 +15,11 @@ const userSchema = new mongoose.Schema(
     // out of normal queries, so it cannot leak into an API response by accident.
     githubToken: { type: String, select: false },
 
+    // A new random value on every login, also put inside the login cookie.
+    // Only the cookie from the newest login matches it, so logging in
+    // somewhere else ends the older session. Cleared on logout.
+    sessionId: String,
+
     role: { type: String, enum: ["member", "admin"], default: "member" },
     banned: { type: Boolean, default: false },
     // false = profile hidden from everyone else and left off the leaderboard.

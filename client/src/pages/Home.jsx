@@ -12,8 +12,12 @@ const LOGIN_ERRORS = {
   suspended: "This account has been suspended by the admins.",
 };
 
+const LOGGED_OUT_REASONS = {
+  signed_in_elsewhere: "You were logged out because this account logged in on another device.",
+};
+
 export default function Home() {
-  const { user, setUser } = useAuth();
+  const { user, setUser, loggedOutReason } = useAuth();
   const location = useLocation();
   const [params] = useSearchParams();
   const loginError = LOGIN_ERRORS[params.get("error")];
@@ -45,6 +49,11 @@ export default function Home() {
   return (
     <>
       {loginError && <p className="status status-error">{loginError}</p>}
+      {!user && LOGGED_OUT_REASONS[loggedOutReason] && (
+        <p className="status status-error" role="status">
+          {LOGGED_OUT_REASONS[loggedOutReason]}
+        </p>
+      )}
       {location.state?.loginFor && !user && (
         <p className="status">
           <a href={loginUrl(location.state.loginFor)}>Log in with GitHub</a> to open that page.

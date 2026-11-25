@@ -7,6 +7,7 @@ Built with MongoDB, Express, React and Node (MERN), in plain JavaScript.
 ## Features
 
 - **Login with GitHub.** No passwords. The site asks GitHub for public information only.
+- **One active login per account.** Logging in on a new device logs out the old one, which is told why.
 - **Automatic sync.** Each member's pull requests are fetched on first login and refreshed every few hours.
 - **Profiles.** Merged count, repos contributed to, a 12-month activity chart and the full pull request list.
 - **Leaderboard.** This week, this month and all time.
@@ -31,7 +32,9 @@ It is a monolith: one server holds every feature. Once deployed, that server als
 3. The server checks the `state` against the cookie. A mismatch means the login did not start on this site, so it is rejected.
 4. The server swaps the `code` for an access token and asks GitHub who it belongs to.
 5. The server saves the user and stores the token encrypted.
-6. The server signs a JWT with the user's id and puts it in an `httpOnly` cookie. The browser sends that cookie on every later request.
+6. The server creates a new random `sessionId`, saves it on the user, and signs a JWT holding the user's id and that `sessionId`. The JWT goes in an `httpOnly` cookie, which the browser sends on every later request.
+
+On every request the server compares the `sessionId` in the cookie with the one saved on the user. Only the newest login matches, so logging in somewhere else ends the older session. When `/api/auth/me` sees such an older cookie, it answers `{ user: null, reason: "signed_in_elsewhere" }` and the home page explains what happened. Logging out removes the saved `sessionId`, so a copied cookie stops working too.
 
 ### Sync
 
@@ -55,6 +58,7 @@ One rule produces every number on the site, so profiles, the leaderboard and the
 | A script steals the login cookie | The cookie is `httpOnly`, so scripts cannot read it |
 | Another website sends requests as a logged-in member | The cookie is `SameSite=Lax` and the API shares the site's address |
 | A forged login callback | The `state` check during login |
+| A stolen or shared login cookie | Each account has one active login. A new login or a logout ends the old cookie at once |
 | A member opens admin URLs directly | Every admin route checks the role on the server, from the database |
 | The database leaks | GitHub tokens are encrypted, and the key lives only in the server's settings |
 | A script floods the API | Rate limits per IP address |

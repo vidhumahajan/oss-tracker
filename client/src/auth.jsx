@@ -8,6 +8,9 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Why the server ended this browser's login, for example "signed_in_elsewhere".
+  // The server only says it once, so we keep it here for the home page to show.
+  const [loggedOutReason, setLoggedOutReason] = useState(null);
 
   // Ask the server who we are. The login cookie itself is invisible to
   // JavaScript (httpOnly), so asking is the only way to know.
@@ -15,6 +18,7 @@ export function AuthProvider({ children }) {
     try {
       const data = await api("/auth/me");
       setUser(data.user);
+      setLoggedOutReason(data.reason || null);
     } catch {
       setUser(null);
     } finally {
@@ -32,7 +36,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, setUser, loading, refresh, logout }}>
+    <AuthContext.Provider value={{ user, setUser, loading, refresh, logout, loggedOutReason }}>
       {children}
     </AuthContext.Provider>
   );
