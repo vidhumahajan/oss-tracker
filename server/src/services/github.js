@@ -94,3 +94,39 @@ export async function searchPullRequests(githubToken, login, { since, page }) {
   const data = await response.json();
   return data.items;
 }
+
+// "owner/repo" -> "/repos/owner/repo", with each part made safe for a URL.
+function repoPath(repoFullName) {
+  const [owner, repo] = repoFullName.split("/");
+  return `${API}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+}
+
+// One pull request: we use its title and description (body).
+export async function fetchPullRequest(githubToken, repoFullName, number) {
+  const response = await fetch(`${repoPath(repoFullName)}/pulls/${number}`, {
+    headers: apiHeaders(githubToken),
+  });
+  if (!response.ok) throwForStatus(response, "pull request request");
+  return response.json();
+}
+
+// The files a pull request changed, each with its diff ("patch").
+// One page of 100 is plenty: the summary looks at 15 files at most.
+export async function fetchPullRequestFiles(githubToken, repoFullName, number) {
+  const response = await fetch(`${repoPath(repoFullName)}/pulls/${number}/files?per_page=100`, {
+    headers: apiHeaders(githubToken),
+  });
+  if (!response.ok) throwForStatus(response, "files request");
+  return response.json();
+}
+
+// An issue in the same repo, or null if it does not exist (for example
+// a "fixes #12" that points at a deleted issue).
+export async function fetchIssue(githubToken, repoFullName, number) {
+  const response = await fetch(`${repoPath(repoFullName)}/issues/${number}`, {
+    headers: apiHeaders(githubToken),
+  });
+  if (response.status === 404 || response.status === 410) return null;
+  if (!response.ok) throwForStatus(response, "issue request");
+  return response.json();
+}

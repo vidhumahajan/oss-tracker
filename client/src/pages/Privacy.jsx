@@ -20,11 +20,22 @@ export default function Privacy() {
           Your public pull requests: title, repository, link, state and dates. Pull requests to
           your own repositories are not stored.
         </li>
+        <li>Summaries of your merged pull requests, if you or an admin asked for one.</li>
         <li>
           An access token from GitHub, encrypted, which we use only to refresh your pull requests.
         </li>
       </ul>
       <p>We do not store your email address, and we do not use tracking or advertising cookies.</p>
+
+      <h2>Pull request summaries</h2>
+      <p>
+        When a member asks for a summary of one of their merged pull requests, the pull request's
+        public title, description and code changes, and the issue it fixes if it names one, are
+        sent to an AI service (Claude, made by Anthropic), which writes the summary. Nothing
+        private is sent: these are the same public pages anyone can open on GitHub. The summary
+        is saved with the pull request, and anyone who can see the profile can read it. An admin
+        can delete a summary.
+      </p>
 
       <h2>Cookies</h2>
       <p>

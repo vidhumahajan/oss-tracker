@@ -45,6 +45,7 @@ test("every admin route refuses visitors and ordinary members", async () => {
     ["post", "/api/admin/blocked-repos"],
     ["delete", "/api/admin/blocked-repos/spam/farm"],
     ["patch", `/api/admin/prs/${id}`],
+    ["delete", `/api/admin/prs/${id}/summary`],
     ["post", "/api/admin/announcements"],
     ["delete", `/api/admin/announcements/${id}`],
     ["get", "/api/admin/log"],

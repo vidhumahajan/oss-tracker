@@ -4,6 +4,7 @@ import { useApi } from "../useApi.js";
 import { useAuth } from "../auth.jsx";
 import { shortDate } from "../format.js";
 import Pager from "./Pager.jsx";
+import PrSummary from "./PrSummary.jsx";
 
 const TABS = [
   ["merged", "Merged"],
@@ -15,6 +16,7 @@ const TABS = [
 const STATE_WORD = { merged: "Merged", open: "Open", closed: "Closed without merging" };
 
 // A user's pull requests, with tabs for each state.
+// Merged PRs can open an AI summary (see PrSummary.jsx).
 // Admins also get a button to exclude a PR from scoring.
 export default function PrList({ login, onScoreChange }) {
   const { user: viewer } = useAuth();
@@ -74,6 +76,9 @@ export default function PrList({ login, onScoreChange }) {
                   {pr.excluded && <span className="pr-flag">Not counted: excluded by an admin</span>}
                   {pr.repoBlocked && <span className="pr-flag">Not counted: repo is blocked</span>}
                 </p>
+                {pr.state === "merged" && (
+                  <PrSummary login={login} pr={pr} canWrite={data.summaries?.canWrite} isAdmin={isAdmin} />
+                )}
               </div>
               {isAdmin && pr.state === "merged" && (
                 <button

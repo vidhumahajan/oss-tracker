@@ -32,11 +32,48 @@ export const github = {
   prs: {}, // login (lowercase) -> list of search items
   searches: [], // every search query the app made, for assertions
   failSearchWith: null, // set to a status code to make search fail
+  prDetails: {}, // "owner/repo#12" -> { title, body }
+  prFiles: {}, // "owner/repo#12" -> list of changed files
+  issues: {}, // "owner/repo#5" -> { title, body }
+  repoCalls: [], // every PR, files and issue call the app made
   reset() {
     this.profiles = {};
     this.prs = {};
     this.searches = [];
     this.failSearchWith = null;
+    this.prDetails = {};
+    this.prFiles = {};
+    this.issues = {};
+    this.repoCalls = [];
+  },
+};
+
+// A reply that passes every check in services/summary.js.
+export function goodSummary() {
+  return {
+    problem: "The scanner crashed when the config file was missing. Users saw a stack trace.",
+    solution: "The PR checks for the file first and falls back to defaults. It also adds a test.",
+    concepts: [
+      { name: "Default values", explanation: "Use safe settings when none are given." },
+      { name: "Error handling", explanation: "Catch the missing file instead of crashing." },
+      { name: "Unit tests", explanation: "A test proves the fix keeps working." },
+    ],
+    changes: [{ file: "src/config.js", change: "Falls back to defaults when the file is missing." }],
+    questions: ["Why defaults?", "How did you test it?", "What else could go wrong?"],
+  };
+}
+
+// The state of our pretend AI service. Tests change it, then call the app.
+export const ai = {
+  calls: [], // every request body the app sent
+  reply: null, // an object (sent as JSON text) or a string (sent as is)
+  status: 200,
+  stopReason: "end_turn",
+  reset() {
+    this.calls = [];
+    this.reply = goodSummary();
+    this.status = 200;
+    this.stopReason = "end_turn";
   },
 };
 
@@ -44,11 +81,50 @@ function json(body, status = 200) {
   return new Response(JSON.stringify(body), { status });
 }
 
-// Replaces fetch so no test ever calls the real GitHub.
+// Answers the GitHub calls made when writing a summary.
+// Unless a test set them, the PR comes from github.prs and has one changed file.
+function fakeRepoCall(path) {
+  const match = path.match(/^\/repos\/([^/]+)\/([^/]+)\/(pulls|issues)\/(\d+)(\/files)?$/);
+  if (!match) return null;
+  const [, owner, repo, kind, number, files] = match;
+  const key = `${owner}/${repo}#${number}`.toLowerCase();
+  github.repoCalls.push(key + (files ? " files" : ` ${kind}`));
+
+  if (kind === "issues") {
+    return github.issues[key] ? json(github.issues[key]) : json({ message: "Not Found" }, 404);
+  }
+  if (files) {
+    return json(github.prFiles[key] || [
+      { filename: "src/config.js", status: "modified", additions: 3, deletions: 1, patch: "@@ -1 +1 @@\n-old\n+new" },
+    ]);
+  }
+  const item = Object.values(github.prs).flat().find((pr) => pr.html_url.toLowerCase().endsWith(`${owner}/${repo}/pull/${number}`.toLowerCase()));
+  return json(github.prDetails[key] || { title: item?.title || "A PR", body: "" });
+}
+
+function fakeAi(options) {
+  ai.calls.push(JSON.parse(options.body));
+  if (ai.status !== 200) return json({ type: "error", error: { message: "nope" } }, ai.status);
+  const text = typeof ai.reply === "string" ? ai.reply : JSON.stringify(ai.reply);
+  return json({
+    type: "message",
+    role: "assistant",
+    stop_reason: ai.stopReason,
+    content: [
+      { type: "thinking", thinking: "" },
+      { type: "text", text },
+    ],
+  });
+}
+
+// Replaces fetch so no test ever calls the real GitHub or the real AI service.
 export function fakeGithub() {
   github.reset();
+  ai.reset();
   mock.method(globalThis, "fetch", async (url, options = {}) => {
     const target = new URL(String(url));
+
+    if (target.hostname === "api.anthropic.com") return fakeAi(options);
 
     // Login: code -> token. The code "bad" is rejected; any other code
     // becomes the token "token-for-<code>".
@@ -77,6 +153,12 @@ export function fakeGithub() {
       const all = github.prs[login] || [];
       const items = all.slice((page - 1) * 100, page * 100);
       return json({ total_count: all.length, incomplete_results: false, items });
+    }
+
+    if (target.pathname.startsWith("/repos/")) {
+      if (!github.profiles[token]) return json({ message: "Bad credentials" }, 401);
+      const answer = fakeRepoCall(target.pathname);
+      if (answer) return answer;
     }
 
     throw new Error(`Unexpected fetch in test: ${url}`);

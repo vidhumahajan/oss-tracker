@@ -312,6 +312,24 @@ adminRouter.patch("/prs/:id", async (req, res) => {
   res.json({ ok: true, excluded });
 });
 
+// Delete a PR's AI summary, for example if it is wrong or rude.
+// The author can then write a new one.
+adminRouter.delete("/prs/:id/summary", async (req, res) => {
+  const pr = await PullRequest.findById(requireObjectId(req.params.id)).populate("author", "login");
+  if (!pr) throw new HttpError(404, "Pull request not found");
+  if (!pr.summary) throw new HttpError(404, "This pull request has no summary.");
+
+  pr.summary = null;
+  await pr.save();
+  await logAdminAction(
+    req.user,
+    "delete_summary",
+    `${pr.repoFullName}#${pr.number}`,
+    pr.author ? `by ${pr.author.login}` : ""
+  );
+  res.json({ ok: true });
+});
+
 // ---------- Announcements ----------
 
 adminRouter.post("/announcements", async (req, res) => {

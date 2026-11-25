@@ -252,13 +252,13 @@ textarea {
   border-bottom: 1px solid var(--line);
   margin: 1.25rem 0;
   overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .tab {
   background: none;
   border: 0;
   border-bottom: 3px solid transparent;
-  margin-bottom: -1px;
   padding: 0.5rem 0;
   color: var(--ink-soft);
   font-weight: 500;
@@ -984,6 +984,55 @@ textarea {
   margin-left: 0.6rem;
   color: #8f1f31;
   font-weight: 600;
+}
+
+/* The AI summary that opens under a merged pull request. */
+.summary-box {
+  margin-top: 0.5rem;
+}
+
+.summary-box .status {
+  margin: 0.5rem 0 0;
+}
+
+.summary {
+  margin-top: 0.6rem;
+  padding: 0.9rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow-wrap: anywhere;
+}
+
+.summary h3 {
+  font-size: 1rem;
+  margin: 1rem 0 0.3rem;
+}
+
+.summary p,
+.summary ul,
+.summary ol {
+  margin: 0 0 0.5rem;
+}
+
+.summary ul,
+.summary ol {
+  padding-left: 1.2rem;
+}
+
+.summary li {
+  margin-bottom: 0.3rem;
+}
+
+.summary code {
+  font-size: 0.875rem;
+}
+
+.summary-note {
+  color: var(--ink-soft);
+  font-size: 0.875rem;
+  padding-left: 0.6rem;
+  border-left: 3px solid var(--merge);
 }
 
 /* ---------- 8. Settings and admin ---------- */

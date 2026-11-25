@@ -40,6 +40,16 @@ export function escapeRegex(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+// Yes/no checks for data we did not get from the browser, such as an AI
+// reply. The caller decides which error to throw when one fails.
+export function isText(value, { max }) {
+  return typeof value === "string" && value.trim() !== "" && value.trim().length <= max;
+}
+
+export function isList(value, { min = 0, max }) {
+  return Array.isArray(value) && value.length >= min && value.length <= max;
+}
+
 // A search box value: a short plain string, or "" if missing.
 export function parseSearch(value) {
   return typeof value === "string" ? value.trim().slice(0, 100) : "";

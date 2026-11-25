@@ -1,11 +1,13 @@
-// Public profile pages.
+// Public profile pages, and the AI summaries of a profile's merged PRs.
 import { Router } from "express";
 import { User, publicUser } from "../models/User.js";
 import { PullRequest } from "../models/PullRequest.js";
-import { optionalAuth } from "../middleware/auth.js";
+import { optionalAuth, requireAuth } from "../middleware/auth.js";
 import { getUserStats, getRanking, getBlockedRepoKeys } from "../services/stats.js";
+import { aiEnabled } from "../services/ai.js";
+import { writeSummary, publicSummary } from "../services/summary.js";
 import { HttpError } from "../utils/httpError.js";
-import { parsePage } from "../utils/validate.js";
+import { parsePage, requireObjectId } from "../utils/validate.js";
 
 export const usersRouter = Router();
 usersRouter.use(optionalAuth);
@@ -25,6 +27,18 @@ async function findVisibleUser(login, viewer) {
     throw new HttpError(404, "Profile not found");
   }
   return user;
+}
+
+// Only the PR's author and admins may ask for a new summary.
+function canWriteSummary(viewer, author) {
+  return Boolean(viewer && (viewer.id === author.id || viewer.role === "admin"));
+}
+
+// One PR of this profile, or 404.
+async function findPrOf(user, id) {
+  const pr = await PullRequest.findOne({ _id: requireObjectId(id), author: user._id });
+  if (!pr) throw new HttpError(404, "Pull request not found");
+  return pr;
 }
 
 usersRouter.get("/:login", async (req, res) => {
@@ -78,7 +92,34 @@ usersRouter.get("/:login/prs", async (req, res) => {
         repoBlocked,
         // Does this PR add to the user's score?
         counts: pr.state === "merged" && !pr.excluded && !repoBlocked,
+        hasSummary: Boolean(pr.summary),
       };
     }),
+    // Tells the React app whether to show "Write summary" on merged PRs
+    // that have none yet.
+    summaries: { canWrite: aiEnabled() && canWriteSummary(req.user, user) },
   });
+});
+
+// Read a saved summary. Anyone who can see the profile can read it.
+usersRouter.get("/:login/prs/:id/summary", async (req, res) => {
+  const user = await findVisibleUser(req.params.login, req.user);
+  const pr = await findPrOf(user, req.params.id);
+  res.json({ summary: pr.summary ? publicSummary(pr.summary) : null });
+});
+
+// Write the summary if there is none yet, otherwise return the saved one.
+usersRouter.post("/:login/prs/:id/summary", requireAuth, async (req, res) => {
+  const user = await findVisibleUser(req.params.login, req.user);
+  const pr = await findPrOf(user, req.params.id);
+
+  if (!canWriteSummary(req.user, user)) {
+    throw new HttpError(403, "Only the author of this pull request or an admin can write its summary.");
+  }
+  if (pr.state !== "merged") {
+    throw new HttpError(400, "Only merged pull requests get a summary.");
+  }
+
+  const summary = await writeSummary(pr, req.user);
+  res.json({ summary: publicSummary(summary) });
 });

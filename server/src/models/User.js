@@ -28,6 +28,11 @@ const userSchema = new mongoose.Schema(
     lastSyncedAt: Date, // last successful sync
     lastSyncAttemptAt: Date, // last try, successful or not
     syncError: String, // why the last sync failed, if it did
+
+    // The daily limit on AI summaries (see services/summary.js).
+    // A window opens with the first summary and lasts 24 hours.
+    summaryWindowStart: Date,
+    summaryCount: { type: Number, default: 0 },
   },
   { timestamps: true } // adds createdAt and updatedAt automatically
 );

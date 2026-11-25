@@ -42,6 +42,11 @@ export const config = {
     .map((login) => login.trim().toLowerCase())
     .filter(Boolean),
 
+  // Optional. Without a key, "Write summary" is switched off and the
+  // generate route answers 503. Existing summaries can still be read.
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY || "",
+  summaryModel: process.env.SUMMARY_MODEL || "claude-haiku-5-5",
+
   isProduction: process.env.NODE_ENV === "production",
   isTest: process.env.NODE_ENV === "test",
   // Set SYNC_ENABLED=false to stop the background sync, for example while debugging.

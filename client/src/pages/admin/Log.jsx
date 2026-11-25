@@ -14,6 +14,7 @@ const ACTIONS = {
   unblock_repo: "unblocked the repo",
   exclude_pr: "excluded the pull request",
   include_pr: "counted again the pull request",
+  delete_summary: "deleted the AI summary of",
   post_announcement: "posted the announcement",
   delete_announcement: "deleted the announcement",
   export_members: "downloaded the member list:",

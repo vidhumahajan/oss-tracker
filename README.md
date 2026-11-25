@@ -10,6 +10,7 @@ Built with MongoDB, Express, React and Node (MERN), in plain JavaScript.
 - **One active login per account.** Logging in on a new device logs out the old one, which is told why.
 - **Automatic sync.** Each member's pull requests are fetched on first login and refreshed every few hours.
 - **Profiles.** Merged count, repos contributed to, a 12-month activity chart and the full pull request list.
+- **Pull request summaries.** Before a GSoC or LFX interview, a member opens one of their merged pull requests and gets a short AI-written explanation: the problem, the solution, the concepts used, the files changed and three questions an interviewer could ask.
 - **Leaderboard.** This week, this month and all time.
 - **Fair play.** Only merged pull requests count. Pull requests to your own repos are ignored. Admins can block a repo or exclude a single pull request.
 - **Admin panel.** Member search, ban, admin roles, CSV export, repo review, announcements, and a log of every admin action.
@@ -20,7 +21,7 @@ Built with MongoDB, Express, React and Node (MERN), in plain JavaScript.
 There are three pieces:
 
 1. **The React app** (`client/`) runs in the browser and draws the pages.
-2. **The API** (`server/`) answers the React app's requests, talks to GitHub, and reads and writes the database.
+2. **The API** (`server/`) answers the React app's requests, talks to GitHub and the AI service, and reads and writes the database.
 3. **MongoDB** stores users, pull requests, blocked repos, announcements and the admin log.
 
 It is a monolith: one server holds every feature. Once deployed, that server also serves the built React files, so the whole product lives on one address. During development, Vite serves the React app and forwards every `/api` request to the server. Either way the browser talks to a single address, so there is no CORS setup.
@@ -47,6 +48,17 @@ Sync copies a member's pull requests from GitHub into the database.
 
 Sync runs on a member's first visit, when they click Sync now (with a 2 minute cooldown), and in the background. Once a minute the server syncs the 5 members who were synced longest ago, which gives 1200 members a turn every 4 hours. The queue is the users collection sorted by last sync time, so there is no Redis and no separate worker. Each member is synced with their own GitHub token, so one person's rate limit never blocks anyone else.
 
+### Summaries
+
+A summary is written once per merged pull request and saved on it, because a merged pull request does not change.
+
+- Only the pull request's author or an admin can ask for one. Anyone who can see the profile can read it.
+- The server collects the pull request's title, description and changed files from GitHub with the member's own token, plus the issue it fixes when the description says "fixes #N", "closes #N" or "resolves #N".
+- To keep each request small, descriptions are cut to 3000 characters, at most 15 files are sent, the diffs together are cut to about 12000 characters, and lock, minified and generated files are left out.
+- The AI is told that all of this is untrusted material to summarise, never instructions. It must answer in a fixed JSON shape, and every field is checked for type and length before anything is saved. A reply that fails the check is thrown away (502).
+- Each member can ask for 10 summaries in 24 hours, counted from their first one.
+- Without `ANTHROPIC_API_KEY`, the button is hidden and the route answers 503.
+
 ### What counts
 
 One rule produces every number on the site, so profiles, the leaderboard and the feed always agree. A pull request counts if it is merged, an admin has not excluded it, and its repo is not blocked. Banned members and private profiles are left out of the leaderboard, the feed and the public totals.
@@ -65,6 +77,8 @@ One rule produces every number on the site, so profiles, the leaderboard and the
 | Malformed input | Every input is type-checked, and request bodies over 10kb are rejected |
 | Scripts loaded from other sites | A Content Security Policy header, set by Helmet |
 | A redirect to another site after login | Only paths on this site are accepted as the return address |
+| Text in a pull request tries to give the AI instructions | The AI is told the material is untrusted, its reply must match a fixed shape and pass length checks, and it is shown as plain text |
+| A member runs up the AI bill | 10 summaries per member per day, small inputs, and a saved summary is never written again |
 | A mistaken or bad admin action | Every admin action is logged, and owners cannot be changed from the panel |
 
 ## Run it locally
@@ -119,6 +133,8 @@ The site runs as one web service plus a hosted database. These steps use Render 
    | `TOKEN_ENCRYPTION_KEY` | a new random value, 64 hex characters |
    | `ADMIN_LOGINS` | your GitHub username |
    | `APP_URL` | `https://YOUR-SITE`, with no slash at the end |
+   | `ANTHROPIC_API_KEY` | optional, turns on pull request summaries |
+   | `SUMMARY_MODEL` | optional, defaults to `claude-haiku-5-5` |
 
 Before inviting people:
 
@@ -143,7 +159,7 @@ server/            the API (Express + MongoDB)
   src/index.js       starts everything
   src/app.js         middleware and routes, in order
   src/routes/        one file per group of URLs
-  src/services/      GitHub calls, sync, and all the counting
+  src/services/      GitHub and AI calls, sync, summaries, and all the counting
   src/models/        what is stored in the database
   src/middleware/    login checks, rate limits, error handling
   src/jobs/          the background sync
