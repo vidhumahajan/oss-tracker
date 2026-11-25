@@ -1,15 +1,20 @@
 import { useState } from "react";
 import { api } from "../api.js";
 import ConfirmButton from "./ConfirmButton.jsx";
+import SummaryEditor from "./SummaryEditor.jsx";
+
+const CHECK_NOTE = "Check it against the pull request before you rely on it.";
 
 // The AI summary of one merged pull request, opened inline in the PR list.
 // Anyone who can see the profile can read a saved summary. Only the author
 // and admins see "Write summary", and only when the site has it switched on
-// (the server tells us with canWrite).
-export default function PrSummary({ login, pr, canWrite, isAdmin }) {
+// (the server tells us with canWrite). The author and admins can also edit
+// a saved summary or put the AI's version back (canEdit).
+export default function PrSummary({ login, pr, canWrite, canEdit, isAdmin }) {
   const [hasSummary, setHasSummary] = useState(pr.hasSummary);
   const [summary, setSummary] = useState(null);
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const url = `/users/${login}/prs/${pr.id}/summary`;
@@ -48,6 +53,23 @@ export default function PrSummary({ login, pr, canWrite, isAdmin }) {
     });
   }
 
+  // Saving an edit and restoring both answer with the new current version.
+  function save(fields) {
+    run(async () => {
+      const data = await api(url, { method: "PATCH", body: fields });
+      setSummary(data.summary);
+      setEditing(false);
+    });
+  }
+
+  function restore() {
+    run(async () => {
+      const data = await api(`${url}/restore`, { method: "POST" });
+      setSummary(data.summary);
+      setEditing(false);
+    });
+  }
+
   function remove() {
     run(async () => {
       await api(`/admin/prs/${pr.id}/summary`, { method: "DELETE" });
@@ -77,11 +99,32 @@ export default function PrSummary({ login, pr, canWrite, isAdmin }) {
         </button>
       )}
 
-      {error && <p className="status status-error">{error}</p>}
+      {error && !editing && <p className="status status-error">{error}</p>}
 
-      {open && summary && (
+      {open && summary && editing && (
         <div className="summary">
-          <p className="summary-note">Written by AI. Check it against the pull request before you rely on it.</p>
+          <SummaryEditor
+            prId={pr.id}
+            summary={summary}
+            busy={busy}
+            error={error}
+            onSave={save}
+            onCancel={() => {
+              setEditing(false);
+              setError("");
+            }}
+            onRestore={restore}
+          />
+        </div>
+      )}
+
+      {open && summary && !editing && (
+        <div className="summary">
+          <p className="summary-note">
+            {summary.editedBy
+              ? `Written by AI and edited by ${summary.editedBy}. ${CHECK_NOTE}`
+              : `Written by AI. ${CHECK_NOTE}`}
+          </p>
 
           <h3>The problem</h3>
           <p>{summary.problem}</p>
@@ -118,10 +161,27 @@ export default function PrSummary({ login, pr, canWrite, isAdmin }) {
             ))}
           </ol>
 
-          {isAdmin && (
-            <ConfirmButton className="button-small" confirmLabel="Confirm delete" onConfirm={remove} disabled={busy}>
-              Delete summary
-            </ConfirmButton>
+          {(canEdit || isAdmin) && (
+            <div className="actions">
+              {canEdit && (
+                <button
+                  type="button"
+                  className="button button-quiet button-small"
+                  onClick={() => {
+                    setError("");
+                    setEditing(true);
+                  }}
+                  disabled={busy}
+                >
+                  Edit
+                </button>
+              )}
+              {isAdmin && (
+                <ConfirmButton className="button-small" confirmLabel="Confirm delete" onConfirm={remove} disabled={busy}>
+                  Delete summary
+                </ConfirmButton>
+              )}
+            </div>
           )}
         </div>
       )}

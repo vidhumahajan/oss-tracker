@@ -1,15 +1,31 @@
 import mongoose from "mongoose";
 
 // A short AI-written explanation of a merged PR, for interview revision.
-// A merged PR never changes, so once saved it is never written again.
+// A merged PR never changes, so the AI writes it only once. The author
+// (or an admin) can then edit the text people see.
 // _id: false because these are parts of the summary, not records of their own.
+const conceptSchema = new mongoose.Schema({ name: String, explanation: String }, { _id: false });
+const changeSchema = new mongoose.Schema({ file: String, change: String }, { _id: false });
+
+// The five parts of the text. A function, so each schema gets its own copy.
+const textFields = () => ({
+  problem: String,
+  solution: String,
+  concepts: [conceptSchema],
+  changes: [changeSchema],
+  questions: [String],
+});
+
 const summarySchema = new mongoose.Schema(
   {
-    problem: String,
-    solution: String,
-    concepts: [new mongoose.Schema({ name: String, explanation: String }, { _id: false })],
-    changes: [new mongoose.Schema({ file: String, change: String }, { _id: false })],
-    questions: [String],
+    // The current version, which everyone sees.
+    ...textFields(),
+    // The AI's own text, written once when the summary is made and never
+    // changed afterwards. Summaries saved before editing existed have none
+    // until their first edit; their saved text counts as the original.
+    original: { type: new mongoose.Schema(textFields(), { _id: false }), default: null },
+    editedAt: Date,
+    editedBy: String, // username of whoever saved the latest edit
     model: String, // which AI model wrote it
     requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     createdAt: Date,

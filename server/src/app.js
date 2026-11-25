@@ -37,7 +37,10 @@ if (!config.isProduction) {
 app.use(helmet({ contentSecurityPolicy: { directives: cspDirectives } }));
 
 // Turn JSON request bodies into req.body. Nothing we accept is large,
-// so anything over 10kb is rejected.
+// so anything over 10kb is rejected. The one exception is an edited PR
+// summary: at its longest allowed size, with non-English letters, it can
+// pass 10kb. It still has to pass the length checks in services/summary.js.
+app.patch("/api/users/:login/prs/:id/summary", express.json({ limit: "32kb" }));
 app.use(express.json({ limit: "10kb" }));
 // Turn the Cookie header into req.cookies.
 app.use(cookieParser());

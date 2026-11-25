@@ -39,11 +39,14 @@ test("the author writes a summary, and it is saved on the pull request", async (
   assert.equal(res.status, 200);
   assert.deepEqual(
     { ...res.body.summary, createdAt: undefined },
-    { ...goodSummary(), createdAt: undefined }
+    { ...goodSummary(), createdAt: undefined, editedBy: null, editedAt: null }
   );
 
   const saved = await PullRequest.findById(merged.id);
   assert.equal(saved.summary.problem, goodSummary().problem);
+  // The AI's original is stored beside the current version from the start.
+  assert.equal(saved.summary.original.problem, goodSummary().problem);
+  assert.equal(saved.summary.original.questions.length, 3);
   assert.equal(saved.summary.model, "claude-haiku-5-5");
   assert.equal(String(saved.summary.requestedBy), alice.user.id);
 
@@ -263,4 +266,215 @@ test("closing keywords link an issue", () => {
   assert.equal(linkedIssueNumber("Resolves: #3"), 3);
   assert.equal(linkedIssueNumber("Related to #4"), null);
   assert.equal(linkedIssueNumber(null), null);
+});
+
+// ---------- Editing and restoring ----------
+
+// An edited version of goodSummary(), different in every part.
+function editedSummary(word = "edited") {
+  return {
+    problem: `The ${word} problem.`,
+    solution: `The ${word} solution.`,
+    concepts: [
+      { name: "One", explanation: `First ${word} idea.` },
+      { name: "Two", explanation: `Second ${word} idea.` },
+      { name: "Three", explanation: `Third ${word} idea.` },
+    ],
+    changes: [
+      { file: "src/a.js", change: `Changed a, ${word}.` },
+      { file: "src/b.js", change: `Changed b, ${word}.` },
+    ],
+    questions: [`Q1 ${word}?`, `Q2 ${word}?`, `Q3 ${word}?`],
+  };
+}
+
+// alice has a saved summary. Returns everything setup() does.
+async function withSummary() {
+  const context = await setup();
+  await context.alice.agent.post(context.url);
+  return context;
+}
+
+const textOf = (s) => ({
+  problem: s.problem,
+  solution: s.solution,
+  concepts: s.concepts,
+  changes: s.changes,
+  questions: s.questions,
+});
+const savedOriginal = async (id) => textOf((await PullRequest.findById(id)).toObject().summary.original);
+const savedCurrent = async (id) => textOf((await PullRequest.findById(id)).toObject().summary);
+
+test("the author can edit a summary several times, and each save is kept", async () => {
+  const { alice, merged, url } = await withSummary();
+  const countBefore = (await User.findById(alice.user._id)).summaryCount;
+
+  for (const word of ["first", "second", "third"]) {
+    const res = await alice.agent.patch(url).send(editedSummary(word));
+    assert.equal(res.status, 200);
+    assert.deepEqual(textOf(res.body.summary), editedSummary(word));
+    assert.equal(res.body.summary.editedBy, "alice");
+
+    // Everyone sees the newest edit.
+    const read = await request(app).get(url);
+    assert.deepEqual(textOf(read.body.summary), editedSummary(word));
+    assert.equal(read.body.summary.editedBy, "alice");
+  }
+
+  // The AI's original is untouched by all of it.
+  assert.deepEqual(await savedOriginal(merged.id), goodSummary());
+  const saved = await PullRequest.findById(merged.id);
+  assert.equal(saved.summary.editedBy, "alice");
+  assert.ok(saved.summary.editedAt instanceof Date);
+
+  // No AI call, nothing taken from the daily limit, nothing logged.
+  assert.equal(ai.calls.length, 1);
+  assert.equal((await User.findById(alice.user._id)).summaryCount, countBefore);
+  assert.equal(await AdminLog.countDocuments(), 0);
+
+  // The list still offers Edit to the author.
+  assert.equal((await alice.agent.get("/api/users/alice/prs")).body.summaries.canEdit, true);
+});
+
+test("an unedited summary has no edited note", async () => {
+  const { url } = await withSummary();
+  const res = await request(app).get(url);
+  assert.equal(res.body.summary.editedBy, null);
+  assert.equal(res.body.summary.editedAt, null);
+});
+
+test("restore brings the AI original back and clears the edited note", async () => {
+  const { alice, merged, url } = await withSummary();
+  await alice.agent.patch(url).send(editedSummary());
+
+  const res = await alice.agent.post(`${url}/restore`);
+  assert.equal(res.status, 200);
+  assert.deepEqual(textOf(res.body.summary), goodSummary());
+  assert.equal(res.body.summary.editedBy, null);
+
+  const saved = await PullRequest.findById(merged.id);
+  assert.equal(saved.summary.editedBy, undefined);
+  assert.equal(saved.summary.editedAt, undefined);
+  assert.deepEqual(await savedOriginal(merged.id), goodSummary());
+  assert.equal((await request(app).get(url)).body.summary.editedBy, null);
+
+  // It can be edited again afterwards.
+  assert.equal((await alice.agent.patch(url).send(editedSummary("again"))).status, 200);
+  assert.equal(ai.calls.length, 1);
+});
+
+test("a summary saved before editing existed keeps its text as the original", async () => {
+  const { alice, merged, url } = await withSummary();
+  await PullRequest.collection.updateOne({ _id: merged._id }, { $unset: { "summary.original": 1 } });
+
+  // Reading it works and shows no edited note.
+  assert.equal((await request(app).get(url)).body.summary.editedBy, null);
+
+  await alice.agent.patch(url).send(editedSummary("first"));
+  await alice.agent.patch(url).send(editedSummary("second"));
+  assert.deepEqual(await savedOriginal(merged.id), goodSummary());
+
+  await alice.agent.post(`${url}/restore`);
+  assert.deepEqual(await savedCurrent(merged.id), goodSummary());
+});
+
+test("an admin can edit and restore another member's summary, and it is logged", async () => {
+  const { merged, url } = await withSummary();
+  const owner = await memberWithPrs("the-owner", []);
+  assert.equal((await owner.agent.get("/api/users/alice/prs")).body.summaries.canEdit, true);
+
+  const res = await owner.agent.patch(url).send(editedSummary());
+  assert.equal(res.status, 200);
+  assert.equal(res.body.summary.editedBy, "the-owner");
+  assert.equal((await owner.agent.post(`${url}/restore`)).status, 200);
+
+  const log = await AdminLog.find().sort({ createdAt: 1 });
+  assert.deepEqual(
+    log.map((e) => `${e.adminLogin}:${e.action}:${e.target}:${e.details}`),
+    [
+      `the-owner:edit_summary:org/one#${merged.number}:by alice`,
+      `the-owner:restore_summary:org/one#${merged.number}:by alice`,
+    ]
+  );
+  assert.equal(ai.calls.length, 1);
+});
+
+test("another member or a visitor cannot edit or restore", async () => {
+  const { alice, bob, merged, url } = await withSummary();
+  await alice.agent.patch(url).send(editedSummary());
+  const before = await savedCurrent(merged.id);
+
+  assert.equal((await bob.agent.patch(url).send(editedSummary("bob"))).status, 403);
+  assert.equal((await bob.agent.post(`${url}/restore`)).status, 403);
+  assert.equal((await request(app).patch(url).send(editedSummary("visitor"))).status, 401);
+  assert.equal((await request(app).post(`${url}/restore`)).status, 401);
+
+  assert.deepEqual(await savedCurrent(merged.id), before);
+  assert.equal((await bob.agent.get("/api/users/alice/prs")).body.summaries.canEdit, false);
+  assert.equal((await request(app).get("/api/users/alice/prs")).body.summaries.canEdit, false);
+});
+
+test("an edit that fails the checks gives a clear 400 and changes nothing", async () => {
+  const { alice, merged, url } = await withSummary();
+  await alice.agent.patch(url).send(editedSummary());
+  const before = await savedCurrent(merged.id);
+  const good = editedSummary("bad");
+
+  const cases = [
+    [{ ...good, problem: "" }, /problem/],
+    [{ ...good, problem: "x".repeat(801) }, /problem.*800/],
+    [{ ...good, solution: 42 }, /solution/],
+    [{ ...good, concepts: good.concepts.slice(0, 2) }, /3 to 6 concepts/],
+    [{ ...good, concepts: [...good.concepts.slice(0, 2), { name: "No explanation" }] }, /concept/],
+    [{ ...good, concepts: "not a list" }, /concepts/],
+    [{ ...good, changes: Array(7).fill({ file: "a.js", change: "x" }) }, /at most 6/],
+    [{ ...good, changes: [{ file: "a.js", change: "y".repeat(401) }] }, /400/],
+    [{ ...good, questions: ["Only one?"] }, /exactly 3 questions/],
+    [{ ...good, questions: ["a?", "b?", ""] }, /question/],
+    [{ ...good, questions: undefined }, /questions/],
+  ];
+  for (const [body, message] of cases) {
+    const res = await alice.agent.patch(url).send(body);
+    assert.equal(res.status, 400, JSON.stringify(body).slice(0, 60));
+    assert.match(res.body.error.message, message);
+  }
+  assert.equal((await alice.agent.patch(url).send([1, 2])).status, 400);
+
+  assert.deepEqual(await savedCurrent(merged.id), before);
+  assert.deepEqual(await savedOriginal(merged.id), goodSummary());
+  assert.equal((await PullRequest.findById(merged.id)).summary.editedBy, "alice");
+});
+
+test("an edit at the longest allowed size is accepted", async () => {
+  const { alice, url } = await withSummary();
+  // Non-English letters take more than one byte each, so this is over 10kb.
+  const long = {
+    problem: "é".repeat(800),
+    solution: "é".repeat(1000),
+    concepts: Array.from({ length: 6 }, () => ({ name: "é".repeat(80), explanation: "é".repeat(300) })),
+    changes: Array.from({ length: 6 }, () => ({ file: "é".repeat(300), change: "é".repeat(400) })),
+    questions: Array.from({ length: 3 }, () => "é".repeat(300)),
+  };
+  const res = await alice.agent.patch(url).send(long);
+  assert.equal(res.status, 200);
+  assert.equal(res.body.summary.solution.length, 1000);
+});
+
+test("editing or restoring a pull request with no summary gives 404", async () => {
+  const { alice, url } = await setup();
+  assert.equal((await alice.agent.patch(url).send(editedSummary())).status, 404);
+  assert.equal((await alice.agent.post(`${url}/restore`)).status, 404);
+});
+
+test("editing works with the AI switched off", async () => {
+  const { alice, url } = await withSummary();
+  const savedKey = config.anthropicApiKey;
+  config.anthropicApiKey = "";
+  try {
+    assert.equal((await alice.agent.get("/api/users/alice/prs")).body.summaries.canEdit, true);
+    assert.equal((await alice.agent.patch(url).send(editedSummary())).status, 200);
+    assert.equal((await alice.agent.post(`${url}/restore`)).status, 200);
+  } finally {
+    config.anthropicApiKey = savedKey;
+  }
 });

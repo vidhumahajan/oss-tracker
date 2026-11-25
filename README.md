@@ -11,6 +11,7 @@ Built with MongoDB, Express, React and Node (MERN), in plain JavaScript.
 - **Automatic sync.** Each member's pull requests are fetched on first login and refreshed every few hours.
 - **Profiles.** Merged count, repos contributed to, a 12-month activity chart and the full pull request list.
 - **Pull request summaries.** Before a GSoC or LFX interview, a member opens one of their merged pull requests and gets a short AI-written explanation: the problem, the solution, the concepts used, the files changed and three questions an interviewer could ask.
+- **Editing summaries.** The author or an admin can edit a saved summary at any time, or put the AI's original back. An edited summary says who edited it.
 - **Leaderboard.** This week, this month and all time.
 - **Fair play.** Only merged pull requests count. Pull requests to your own repos are ignored. Admins can block a repo or exclude a single pull request.
 - **Mentors.** A public Mentors page lists a few experienced members. Members request a free 1-on-1 session, an admin confirms a time, and the member gets the Google Meet link. There is no payment.
@@ -89,11 +90,11 @@ One rule produces every number on the site, so profiles, the leaderboard and the
 | A member opens admin URLs directly | Every admin route checks the role on the server, from the database |
 | The database leaks | GitHub tokens are encrypted, and the key lives only in the server's settings |
 | A script floods the API | Rate limits per IP address |
-| Malformed input | Every input is type-checked, and request bodies over 10kb are rejected |
+| Malformed input | Every input is type-checked, and request bodies over 10kb are rejected (32kb for an edited summary, which can be long) |
 | Scripts loaded from other sites | A Content Security Policy header, set by Helmet |
 | A redirect to another site after login | Only paths on this site are accepted as the return address |
 | Text in a pull request tries to give the AI instructions | The AI is told the material is untrusted, its reply must match a fixed shape and pass length checks, and it is shown as plain text |
-| A member runs up the AI bill | 10 summaries per member per day, small inputs, and a saved summary is never written again |
+| A member runs up the AI bill | 10 summaries per member per day, small inputs, and the AI never rewrites a saved summary. Editing one never calls the AI |
 | A mentor's private Meet link leaks | It is sent only to admins and to the member with a confirmed session. Links that are not `https://meet.google.com/...` are rejected |
 | A member books every mentor | One open session per mentor and at most 2 in total |
 | A mistaken or bad admin action | Every admin action is logged, and owners cannot be changed from the panel |

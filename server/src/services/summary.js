@@ -3,7 +3,8 @@
 // Steps: check the daily limit, collect the PR from GitHub (title,
 // description, linked issue, changed code), ask the AI for JSON in a fixed
 // shape, check every field, and save it on the PullRequest. A merged PR
-// never changes, so a saved summary is never written again.
+// never changes, so the AI never writes a saved summary again. The author
+// or an admin can edit the text afterwards, and the AI's original is kept.
 import { User } from "../models/User.js";
 import { PullRequest } from "../models/PullRequest.js";
 import { config } from "../config.js";
@@ -191,23 +192,38 @@ const SCHEMA = {
   additionalProperties: false,
 };
 
-// Checks every field of the AI's reply. Returns a clean summary, or null.
+// Says what is wrong with a summary, or returns "" if it passes.
+// The same checks cover the AI's reply and a person's edit, so an edited
+// summary can never hold anything the AI would not be allowed to write.
 // The limits are a little looser than the prompt asks for, so a slightly
 // long answer still passes, but a runaway one does not.
-export function checkSummary(reply) {
-  if (!reply || typeof reply !== "object") return null;
-  const { problem, solution, concepts, changes, questions } = reply;
+export function summaryProblem(summary) {
+  if (!summary || typeof summary !== "object") {
+    return "A summary needs a problem, a solution, concepts, changes and questions.";
+  }
+  const { problem, solution, concepts, changes, questions } = summary;
 
-  const ok =
-    isText(problem, { max: 800 }) &&
-    isText(solution, { max: 1000 }) &&
-    isList(concepts, { min: 3, max: 6 }) &&
-    concepts.every((c) => c && isText(c.name, { max: 80 }) && isText(c.explanation, { max: 300 })) &&
-    isList(changes, { max: 6 }) &&
-    changes.every((c) => c && isText(c.file, { max: 300 }) && isText(c.change, { max: 400 })) &&
-    isList(questions, { min: 3, max: 3 }) &&
-    questions.every((q) => isText(q, { max: 300 }));
-  if (!ok) return null;
+  if (!isText(problem, { max: 800 })) return "The problem must be filled in, at most 800 characters.";
+  if (!isText(solution, { max: 1000 })) return "The solution must be filled in, at most 1000 characters.";
+  if (!isList(concepts, { min: 3, max: 6 })) return "There must be 3 to 6 concepts.";
+  if (!concepts.every((c) => c && isText(c.name, { max: 80 }) && isText(c.explanation, { max: 300 }))) {
+    return "Each concept needs a name (at most 80 characters) and an explanation (at most 300 characters).";
+  }
+  if (!isList(changes, { max: 6 })) return "There can be at most 6 changed files.";
+  if (!changes.every((c) => c && isText(c.file, { max: 300 }) && isText(c.change, { max: 400 }))) {
+    return "Each changed file needs a path (at most 300 characters) and a sentence (at most 400 characters).";
+  }
+  if (!isList(questions, { min: 3, max: 3 })) return "There must be exactly 3 questions.";
+  if (!questions.every((q) => isText(q, { max: 300 }))) {
+    return "Each question must be filled in, at most 300 characters.";
+  }
+  return "";
+}
+
+// Checks every field of the AI's reply. Returns a clean summary, or null.
+export function checkSummary(reply) {
+  if (summaryProblem(reply)) return null;
+  const { problem, solution, concepts, changes, questions } = reply;
 
   return {
     problem: problem.trim(),
@@ -260,7 +276,13 @@ export async function writeSummary(pr, user) {
       { _id: pr._id, summary: null },
       {
         $set: {
-          summary: { ...summary, model: config.summaryModel, requestedBy: user._id, createdAt: new Date() },
+          summary: {
+            ...summary,
+            original: summary, // kept as the AI wrote it, whatever edits come later
+            model: config.summaryModel,
+            requestedBy: user._id,
+            createdAt: new Date(),
+          },
         },
       }
     );
@@ -271,14 +293,81 @@ export async function writeSummary(pr, user) {
   }
 }
 
-// The fields of a summary that are safe to send to the browser.
-export function publicSummary(summary) {
+// ---------- Editing ----------
+
+// The five parts of a summary's text, as plain objects.
+function textOf(parts) {
   return {
-    problem: summary.problem,
-    solution: summary.solution,
-    concepts: summary.concepts.map((c) => ({ name: c.name, explanation: c.explanation })),
-    changes: summary.changes.map((c) => ({ file: c.file, change: c.change })),
-    questions: [...summary.questions],
+    problem: parts.problem,
+    solution: parts.solution,
+    concepts: parts.concepts.map((c) => ({ name: c.name, explanation: c.explanation })),
+    changes: parts.changes.map((c) => ({ file: c.file, change: c.change })),
+    questions: [...parts.questions],
+  };
+}
+
+// Summaries saved before editing existed have no original. Their saved
+// text is the original.
+function originalOf(summary) {
+  return textOf(summary.original || summary);
+}
+
+function isEdited(summary) {
+  return JSON.stringify(textOf(summary)) !== JSON.stringify(originalOf(summary));
+}
+
+// Replaces the current version and returns the saved summary.
+// editor is the user to credit, or null to clear the edited note.
+// Never calls the AI and never touches the daily limit.
+async function saveCurrentVersion(pr, text, editor) {
+  const filter = { _id: pr._id, summary: { $ne: null } };
+  const update = { $set: {} };
+  for (const [key, value] of Object.entries(text)) update.$set[`summary.${key}`] = value;
+
+  if (editor) {
+    update.$set["summary.editedAt"] = new Date();
+    update.$set["summary.editedBy"] = editor.login;
+  } else {
+    update.$unset = { "summary.editedAt": 1, "summary.editedBy": 1 };
+  }
+
+  // An older summary gets its original now, from the text as it was before
+  // this change. The filter makes sure nobody saved over that text meanwhile.
+  if (!pr.summary.original) {
+    filter["summary.original"] = null;
+    update.$set["summary.original"] = textOf(pr.summary);
+  }
+
+  const result = await PullRequest.updateOne(filter, update);
+  const saved = await PullRequest.findById(pr._id);
+  if (!saved?.summary) throw new HttpError(404, "This pull request has no summary.");
+  if (result.matchedCount === 0) {
+    throw new HttpError(409, "Someone else changed this summary just now. Reload the page and try again.");
+  }
+  return saved.summary;
+}
+
+// Saves a person's edit as the current version. Throws 400, and saves
+// nothing, if the text fails the same checks as the AI's reply.
+export async function editSummary(pr, editor, input) {
+  const problem = summaryProblem(input);
+  if (problem) throw new HttpError(400, problem);
+  return saveCurrentVersion(pr, checkSummary(input), editor);
+}
+
+// Puts the AI's original back as the current version.
+export async function restoreSummary(pr) {
+  return saveCurrentVersion(pr, originalOf(pr.summary), null);
+}
+
+// The fields of a summary that are safe to send to the browser.
+// editedBy is set only while the text differs from the AI's original.
+export function publicSummary(summary) {
+  const edited = isEdited(summary);
+  return {
+    ...textOf(summary),
     createdAt: summary.createdAt,
+    editedBy: edited ? summary.editedBy || null : null,
+    editedAt: edited ? summary.editedAt || null : null,
   };
 }

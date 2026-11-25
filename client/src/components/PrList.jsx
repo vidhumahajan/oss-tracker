@@ -77,7 +77,13 @@ export default function PrList({ login, onScoreChange }) {
                   {pr.repoBlocked && <span className="pr-flag">Not counted: repo is blocked</span>}
                 </p>
                 {pr.state === "merged" && (
-                  <PrSummary login={login} pr={pr} canWrite={data.summaries?.canWrite} isAdmin={isAdmin} />
+                  <PrSummary
+                    login={login}
+                    pr={pr}
+                    canWrite={data.summaries?.canWrite}
+                    canEdit={data.summaries?.canEdit}
+                    isAdmin={isAdmin}
+                  />
                 )}
               </div>
               {isAdmin && pr.state === "merged" && (

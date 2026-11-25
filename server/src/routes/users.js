@@ -1,11 +1,13 @@
-// Public profile pages, and the AI summaries of a profile's merged PRs.
+// Public profile pages, and the AI summaries of a profile's merged PRs
+// (writing, reading, editing and restoring them).
 import { Router } from "express";
 import { User, publicUser } from "../models/User.js";
 import { PullRequest } from "../models/PullRequest.js";
 import { optionalAuth, requireAuth } from "../middleware/auth.js";
 import { getUserStats, getRanking, getBlockedRepoKeys } from "../services/stats.js";
 import { aiEnabled } from "../services/ai.js";
-import { writeSummary, publicSummary } from "../services/summary.js";
+import { writeSummary, editSummary, restoreSummary, publicSummary } from "../services/summary.js";
+import { logAdminAction } from "../models/AdminLog.js";
 import { HttpError } from "../utils/httpError.js";
 import { parsePage, requireObjectId } from "../utils/validate.js";
 
@@ -96,8 +98,11 @@ usersRouter.get("/:login/prs", async (req, res) => {
       };
     }),
     // Tells the React app whether to show "Write summary" on merged PRs
-    // that have none yet.
-    summaries: { canWrite: aiEnabled() && canWriteSummary(req.user, user) },
+    // that have none yet, and "Edit" on saved ones. Editing needs no AI.
+    summaries: {
+      canWrite: aiEnabled() && canWriteSummary(req.user, user),
+      canEdit: canWriteSummary(req.user, user),
+    },
   });
 });
 
@@ -121,5 +126,40 @@ usersRouter.post("/:login/prs/:id/summary", requireAuth, async (req, res) => {
   }
 
   const summary = await writeSummary(pr, req.user);
+  res.json({ summary: publicSummary(summary) });
+});
+
+// Finds a saved summary the viewer may edit or restore, or throws.
+async function summaryToChange(req) {
+  const user = await findVisibleUser(req.params.login, req.user);
+  const pr = await findPrOf(user, req.params.id);
+  if (!canWriteSummary(req.user, user)) {
+    throw new HttpError(403, "Only the author of this pull request or an admin can change its summary.");
+  }
+  if (!pr.summary) throw new HttpError(404, "This pull request has no summary.");
+  return { user, pr };
+}
+
+// An admin changing someone else's summary is logged.
+// An author changing their own is not.
+async function logIfAdminForOther(viewer, author, action, pr) {
+  if (viewer.id === author.id) return;
+  await logAdminAction(viewer, action, `${pr.repoFullName}#${pr.number}`, `by ${author.login}`);
+}
+
+// Edit the summary. The body is the whole summary: problem, solution,
+// concepts, changes and questions. Only the current version changes.
+usersRouter.patch("/:login/prs/:id/summary", requireAuth, async (req, res) => {
+  const { user, pr } = await summaryToChange(req);
+  const summary = await editSummary(pr, req.user, req.body);
+  await logIfAdminForOther(req.user, user, "edit_summary", pr);
+  res.json({ summary: publicSummary(summary) });
+});
+
+// Put the AI's original text back.
+usersRouter.post("/:login/prs/:id/summary/restore", requireAuth, async (req, res) => {
+  const { user, pr } = await summaryToChange(req);
+  const summary = await restoreSummary(pr);
+  await logIfAdminForOther(req.user, user, "restore_summary", pr);
   res.json({ summary: publicSummary(summary) });
 });

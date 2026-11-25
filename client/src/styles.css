@@ -1035,6 +1035,16 @@ textarea {
   border-left: 3px solid var(--merge);
 }
 
+/* Edit, Save changes, Cancel, Restore: these wrap on a phone. */
+.summary .actions {
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+}
+
+.summary .form {
+  margin-bottom: 0;
+}
+
 /* Mentors and sessions: the public Mentors page and the admin Mentors tab. */
 .mentor-list,
 .session-list {
