@@ -1,0 +1,13 @@
+{
+  "name": "oss-tracker",
+  "private": true,
+  "description": "Track the open source pull requests a community gets merged.",
+  "scripts": {
+    "build": "npm install --prefix server && npm install --include=dev --prefix client && npm run build --prefix client",
+    "start": "npm start --prefix server",
+    "test": "npm test --prefix server"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
