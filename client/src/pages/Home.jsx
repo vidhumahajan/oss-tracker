@@ -3,7 +3,7 @@ import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { api } from "../api.js";
 import { useApi } from "../useApi.js";
 import { useAuth, loginUrl } from "../auth.jsx";
-import { number, plural, shortDate } from "../format.js";
+import { dateTime, number, plural, shortDate } from "../format.js";
 import Avatar from "../components/Avatar.jsx";
 import MergeGraph from "../components/MergeGraph.jsx";
 import BadgePanel from "../components/BadgePanel.jsx";
@@ -168,6 +168,7 @@ function Pitch({ totals }) {
 function Welcome({ user, firstSync, refreshKey }) {
   const profile = useApi(`/users/${user.login}?r=${refreshKey}`);
   const stats = profile.data?.stats;
+  const next = useApi("/mentors/next-session").data?.item;
 
   return (
     <section className="welcome">
@@ -180,6 +181,12 @@ function Welcome({ user, firstSync, refreshKey }) {
         <p className="status status-error">
           Could not fetch your pull requests. Open <Link to="/settings">Settings</Link> and choose
           Sync now.
+        </p>
+      )}
+      {next && (
+        <p className="status status-ok">
+          Your session with {next.mentorName} is confirmed for {dateTime(next.scheduledAt)}.{" "}
+          <Link to="/mentors">Open the Mentors page</Link>
         </p>
       )}
       {user.syncError && (

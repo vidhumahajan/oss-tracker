@@ -1,10 +1,19 @@
 // The admin side of mentors and sessions. admin.js attaches this router,
 // so every route here already has a logged-in admin.
-// Every change is written to the admin log.
+// Every change is written to the admin log, and the people involved get
+// an email (services/sessionMail.js).
+//
+// Email addresses are private. They appear in these admin answers only.
 import { Router } from "express";
 import { Mentor } from "../models/Mentor.js";
 import { Booking, canMove } from "../models/Booking.js";
 import { logAdminAction } from "../models/AdminLog.js";
+import {
+  sendConfirmed,
+  sendDeclined,
+  sendCancelled,
+  sendRescheduled,
+} from "../services/sessionMail.js";
 import { HttpError } from "../utils/httpError.js";
 import {
   parsePage,
@@ -14,6 +23,7 @@ import {
   requireObjectId,
   requireMeetLink,
   requireDate,
+  optionalEmail,
 } from "../utils/validate.js";
 
 export const adminMentorsRouter = Router();
@@ -26,6 +36,8 @@ const MENTOR_FIELDS = {
   expertise: (value) => requireString(value, "expertise", { max: 120 }),
   bio: (value) => requireString(value, "bio", { max: 600 }),
   meetLink: (value) => requireMeetLink(value),
+  // Optional. "" removes a saved address.
+  email: (value) => optionalEmail(value),
 };
 
 function adminMentor(mentor) {
@@ -35,6 +47,7 @@ function adminMentor(mentor) {
     expertise: mentor.expertise,
     bio: mentor.bio,
     meetLink: mentor.meetLink,
+    email: mentor.email || "",
     isActive: mentor.isActive,
     createdAt: mentor.createdAt,
   };
@@ -73,7 +86,7 @@ adminMentorsRouter.patch("/mentors/:id", async (req, res) => {
   for (const [name, check] of Object.entries(MENTOR_FIELDS)) {
     if (body[name] === undefined) continue;
     const value = check(body[name]);
-    if (value !== mentor[name]) {
+    if (value !== (mentor[name] || "")) {
       mentor[name] = value;
       changed.push(name);
     }
@@ -105,6 +118,7 @@ function adminBooking(item) {
     id: item.id,
     member: item.member ? { login: item.member.login, name: item.member.name, avatarUrl: item.member.avatarUrl } : null,
     mentor: item.mentor ? { id: item.mentor.id, name: item.mentor.name, meetLink: item.mentor.meetLink } : null,
+    email: item.email || "",
     topic: item.topic,
     preferredTimes: item.preferredTimes,
     status: item.status,
@@ -112,6 +126,20 @@ function adminBooking(item) {
     adminNote: item.adminNote || "",
     createdAt: item.createdAt,
   };
+}
+
+// A date and time that has not passed yet.
+function futureDate(value) {
+  const date = requireDate(value, "scheduledAt");
+  if (date.getTime() < Date.now()) {
+    throw new HttpError(400, "scheduledAt must be in the future");
+  }
+  return date;
+}
+
+// "alice with Priya Nair", for the admin log.
+function sessionName(item) {
+  return `${item.member?.login || "a deleted member"} with ${item.mentor?.name || "a mentor"}`;
 }
 
 // Every session request, newest first.
@@ -144,6 +172,8 @@ const STATUS_ACTIONS = {
 
 // Confirm (with scheduledAt), decline (with an optional adminNote),
 // mark done, or cancel. Only the moves in models/Booking.js are allowed.
+// Sending only scheduledAt, with no status, moves a confirmed session to a
+// new time.
 adminMentorsRouter.patch("/bookings/:id", async (req, res) => {
   const item = await Booking.findById(requireObjectId(req.params.id))
     .populate("member", "login name avatarUrl")
@@ -151,6 +181,9 @@ adminMentorsRouter.patch("/bookings/:id", async (req, res) => {
   if (!item) throw new HttpError(404, "Session not found");
 
   const status = req.body?.status;
+  if (status === undefined && req.body?.scheduledAt !== undefined) {
+    return reschedule(req, res, item);
+  }
   if (!STATUS_ACTIONS[status]) {
     throw new HttpError(400, "status must be confirmed, declined, done or cancelled");
   }
@@ -162,19 +195,53 @@ adminMentorsRouter.patch("/bookings/:id", async (req, res) => {
   let details = note;
 
   if (status === "confirmed") {
-    const scheduledAt = requireDate(req.body?.scheduledAt, "scheduledAt");
-    if (scheduledAt.getTime() < Date.now()) {
-      throw new HttpError(400, "scheduledAt must be in the future");
-    }
+    const scheduledAt = futureDate(req.body?.scheduledAt);
     item.scheduledAt = scheduledAt;
+    item.reminder30SentAt = undefined;
+    item.reminderStartSentAt = undefined;
     details = [`for ${logTime(scheduledAt)}`, note].filter(Boolean).join(", ");
   }
 
   item.status = status;
+  item.statusChangedAt = new Date();
   if (note) item.adminNote = note;
   await item.save();
 
-  const target = `${item.member?.login || "a deleted member"} with ${item.mentor?.name || "a mentor"}`;
-  await logAdminAction(req.user, STATUS_ACTIONS[status], target, details);
+  await logAdminAction(req.user, STATUS_ACTIONS[status], sessionName(item), details);
+
+  // Marking a session done sends nothing.
+  if (status === "confirmed") await sendConfirmed(item);
+  if (status === "declined") await sendDeclined(item);
+  // Admins can only cancel a confirmed session.
+  if (status === "cancelled") await sendCancelled(item, { byMember: false, wasConfirmed: true });
+
   res.json({ item: adminBooking(item) });
 });
+
+// A new time for a confirmed session. Both reminders are cleared so they
+// go out again for the new time, and the member and mentor get an email.
+async function reschedule(req, res, item) {
+  if (item.status !== "confirmed") {
+    throw new HttpError(409, "Only a confirmed session can be moved to a new time.");
+  }
+  const scheduledAt = futureDate(req.body.scheduledAt);
+  if (scheduledAt.getTime() === item.scheduledAt.getTime()) {
+    return res.json({ item: adminBooking(item) }); // same time, nothing to do
+  }
+
+  const before = item.scheduledAt;
+  item.scheduledAt = scheduledAt;
+  item.reminder30SentAt = undefined;
+  item.reminderStartSentAt = undefined;
+  item.statusChangedAt = new Date();
+  await item.save();
+
+  await logAdminAction(
+    req.user,
+    "reschedule_session",
+    sessionName(item),
+    `from ${logTime(before)} to ${logTime(scheduledAt)}`
+  );
+  await sendRescheduled(item);
+  res.json({ item: adminBooking(item) });
+}

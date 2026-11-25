@@ -30,7 +30,7 @@ async function setup() {
 const book = (member, mentor, extra = {}) =>
   member.agent
     .post(`/api/mentors/${mentor.id}/bookings`)
-    .send({ topic: "Preparing my GSoC proposal", preferredTimes: "Saturday after 6pm", ...extra });
+    .send({ topic: "Preparing my GSoC proposal", preferredTimes: "Saturday after 6pm", email: "member@example.com", ...extra });
 
 const actions = async () => (await AdminLog.find().sort({ createdAt: 1 })).map((e) => `${e.action}:${e.target}`);
 

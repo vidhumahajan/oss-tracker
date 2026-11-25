@@ -16,6 +16,7 @@ Built with MongoDB, Express, React and Node (MERN), in plain JavaScript.
 - **GitHub profile badge.** A small live badge with a member's merged count and rank, for their GitHub profile README, linking back to their profile here. One click adds it for them, or they copy one line by hand.
 - **Fair play.** Only merged pull requests count. Pull requests to your own repos are ignored. Admins can block a repo or exclude a single pull request.
 - **Mentors.** A public Mentors page lists a few experienced members. Members request a free 1-on-1 session, an admin confirms a time, and the member gets the Google Meet link. There is no payment.
+- **Session emails.** Nobody has to keep checking the site. Admins get an email for every new request, members hear when a session is confirmed, declined, moved or cancelled, and everyone gets a reminder 30 minutes before and at the start. A count on the Mentors link shows members what changed since they last looked.
 - **Weekly post.** On the admin Overview, one click writes a plain-text message with this week's top 5, totals and first-time mergers, ready to paste into the community's WhatsApp group.
 - **Admin panel.** Member search, ban, admin roles, CSV export, repo review, announcements, mentors and session requests, and a log of every admin action.
 - **Privacy.** Members can hide their profile or delete their account and data.
@@ -27,6 +28,8 @@ There are three pieces:
 1. **The React app** (`client/`) runs in the browser and draws the pages.
 2. **The API** (`server/`) answers the React app's requests, talks to GitHub and the AI service, and reads and writes the database.
 3. **MongoDB** stores users, pull requests (with their summaries), blocked repos, announcements, mentors, session requests and the admin log.
+
+Two outside services are optional: an SMTP account for session emails, and a second GitHub OAuth app for the profile badge.
 
 It is a monolith: one server holds every feature. Once deployed, that server also serves the built React files, so the whole product lives on one address. During development, Vite serves the React app and forwards every `/api` request to the server. Either way the browser talks to a single address, so there is no CORS setup.
 
@@ -84,6 +87,32 @@ A member can cancel their own requested or confirmed session. Each member can ha
 
 The Meet link is private. It is sent only to admins and to the member whose session is confirmed, and never appears on the public Mentors page.
 
+An admin can move a confirmed session to a new time with Change time on the admin Mentors tab.
+
+### Session emails
+
+All sending is in `server/src/services/mail.js`, using [nodemailer](https://nodemailer.com) and any SMTP account. What each email says is in `server/src/services/sessionMail.js`. Emails are plain text. Dates and times are written in `TIME_ZONE` (India Standard Time by default), with the zone named.
+
+| When | Who gets an email |
+|---|---|
+| A member requests a session | `ADMIN_EMAIL`: the member, mentor, topic, times and a link to the admin Mentors tab |
+| An admin confirms it | The member: mentor, time, a link to the Mentors page and an "Add to Google Calendar" link for 30 minutes. The mentor: member, topic and time |
+| An admin declines it | The member, with the admin's note |
+| A session is cancelled | The member, with the admin's note if an admin cancelled. The mentor too, if a time had been confirmed. `ADMIN_EMAIL` too, if the member cancelled |
+| An admin moves it to a new time | The member and the mentor |
+| 30 minutes before | The member, the mentor and `ADMIN_EMAIL` |
+| At the start time | The member and the mentor |
+
+Rules:
+
+- **No Meet link in member emails.** They link to the Mentors page, where the member sees the link after logging in. If a member typed a wrong address, the link stays private.
+- **Addresses are private.** Members give an address when they request a session, and mentors have an optional one set by admins. Both appear only in admin answers, never in the public mentor list or to other members, and never in the server log. Deleting an account deletes its sessions and their addresses.
+- **Email never breaks the site.** Without the SMTP settings nothing is sent, one line is logged, and everything else works as before. A failed send is logged and the request that caused it still succeeds.
+- **Reminders go out once.** `server/src/jobs/reminderLoop.js` runs once a minute, like the sync. When a reminder is sent, the time is saved on the session, so a restart never sends it twice. If the server was down at the exact moment, the 30 minute reminder still goes out as long as the session has not started, and the start reminder goes out up to 10 minutes late, then is skipped. Moving a session to a new time clears both, so they go out again for the new time.
+- **The count on the Mentors link** is the member's sessions that an admin changed (status or time) since the member last opened the Mentors page. Opening the page clears it. A member's own request or cancel does not count.
+
+A logged-in member with a confirmed upcoming session also sees one line about it on the home page.
+
 ### The GitHub profile badge
 
 `GET /api/badge/USERNAME.svg` is a small two-tone image: "OSS Tracker" on the left, and "12 merged PRs, #3 all time" on the right, or "OSS Tracker member" before the first merge. It is drawn by hand from fixed words and numbers only. A private, banned or unknown profile gets one neutral badge, "view profile", so the badge never reveals whether an account exists. The image is cached for an hour and has its own, more generous rate limit, because GitHub's image proxy asks for it on every profile view.
@@ -132,6 +161,10 @@ One rule produces every number on the site, so profiles, the leaderboard and the
 | A member uses up the free AI allowance | 3 summaries per member per day, small inputs, and the AI never rewrites a saved summary. Editing one never calls the AI |
 | A mentor's private Meet link leaks | It is sent only to admins and to the member with a confirmed session. Links that are not `https://meet.google.com/...` are rejected |
 | A member books every mentor | One open session per mentor and at most 2 in total |
+| Members' and mentors' email addresses leak | They are returned only in admin answers and never logged. Deleting an account deletes them |
+| A member types someone else's email address | Emails never contain the Meet link, only a link to the Mentors page, which needs the member's login |
+| A mail server problem slows or breaks the site | Email is optional, failures are logged and never fail the request, and SMTP calls give up after a few seconds |
+| A name with a line break adds email headers | Subjects are squeezed onto one line before sending |
 | "Add it for me" gets more access than it needs | It uses a separate OAuth app with only the `public_repo` scope, asked for only when the member presses the button. The token is used once, never stored, logged or sent to the browser, and the grant is deleted on success and on every failure |
 | A member approves "Add it for me" while logged in to GitHub as someone else | The server checks the token belongs to the logged-in member's GitHub account, and writes nothing if not |
 | A forged badge callback | The same `state` check as login |
@@ -201,6 +234,32 @@ The site runs as one web service plus a hosted database. These steps use Render 
    | `SUMMARY_MODEL` | optional, defaults to `openai/gpt-oss-120b` |
    | `BADGE_GITHUB_CLIENT_ID` | optional, from the badge OAuth app in step 3 |
    | `BADGE_GITHUB_CLIENT_SECRET` | optional, from the badge OAuth app in step 3 |
+   | `SMTP_HOST` | optional, turns on session emails. For Gmail: `smtp.gmail.com` (see "Sending email" below) |
+   | `SMTP_PORT` | optional, defaults to `587` |
+   | `SMTP_USER` | optional, the email account that sends |
+   | `SMTP_PASS` | optional, its password. For Gmail, an app password |
+   | `MAIL_FROM` | optional, the From line, for example `OSS Tracker <you@gmail.com>`. Defaults to `SMTP_USER` |
+   | `ADMIN_EMAIL` | optional, where new requests and admin reminders go |
+   | `TIME_ZONE` | optional, the time zone for times in emails. Defaults to `Asia/Kolkata` |
+
+### Sending email
+
+Any SMTP account works. These steps use a Gmail account, which can send a few hundred emails a day for free. That is plenty for session emails. A separate Gmail account just for the site keeps your own inbox out of it.
+
+1. **Turn on 2-Step Verification** for the Gmail account at https://myaccount.google.com/security. Google only offers app passwords when it is on.
+2. **Create an app password** at https://myaccount.google.com/apppasswords. Give it a name such as `OSS Tracker`, then copy the 16-letter password Google shows. It is shown only once.
+3. **Add the settings:**
+   ```
+   SMTP_HOST=smtp.gmail.com
+   SMTP_PORT=587
+   SMTP_USER=the-site-account@gmail.com
+   SMTP_PASS=the 16-letter app password, without spaces
+   MAIL_FROM=OSS Tracker <the-site-account@gmail.com>
+   ADMIN_EMAIL=your own address
+   ```
+4. **Restart the server** and request a session yourself. The admin email should arrive within a minute. If it does not, the server log has a line starting with `Email "` that says why.
+
+Gmail only sends from the account's own address, so keep that address in `MAIL_FROM`. Never use your normal Gmail password here. If the app password leaks, delete it on the same page and create a new one.
 
 Before inviting people:
 
@@ -225,10 +284,10 @@ server/            the API (Express + MongoDB)
   src/index.js       starts everything
   src/app.js         middleware and routes, in order
   src/routes/        one file per group of URLs
-  src/services/      GitHub and AI calls, sync, summaries, the badge, and all the counting
+  src/services/      GitHub, AI and email, sync, summaries, the badge, and all the counting
   src/models/        what is stored in the database
   src/middleware/    login checks, rate limits, error handling
-  src/jobs/          the background sync
+  src/jobs/          the background sync and the session reminders
   tests/             automated tests
 client/            the website (React + Vite)
   src/pages/         one file per page

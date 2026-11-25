@@ -10,6 +10,8 @@ const mentorSchema = new mongoose.Schema(
     bio: { type: String, required: true },
     // Private. Only admins and members with a confirmed session ever see it.
     meetLink: { type: String, required: true },
+    // Private and optional. Session emails go here. Only admins see it.
+    email: String,
     isActive: { type: Boolean, default: true },
   },
   { timestamps: true }
@@ -17,7 +19,7 @@ const mentorSchema = new mongoose.Schema(
 
 export const Mentor = mongoose.model("Mentor", mentorSchema);
 
-// The fields anyone may see. The Meet link is left out on purpose.
+// The fields anyone may see. The Meet link and email are left out on purpose.
 export function publicMentor(mentor) {
   return {
     id: mentor.id,

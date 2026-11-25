@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { Router } from "express";
 import { config } from "../config.js";
 import { User, publicUser } from "../models/User.js";
+import { countSessionAlerts } from "../models/Booking.js";
 import { exchangeCodeForToken, fetchGithubProfile } from "../services/github.js";
 import { optionalAuth, SIGNED_IN_ELSEWHERE } from "../middleware/auth.js";
 import { authLimiter } from "../middleware/rateLimit.js";
@@ -112,7 +113,7 @@ authRouter.post("/logout", optionalAuth, async (req, res) => {
 
 // Who am I? The React app calls this on load.
 // Answers { user: null } for visitors, which is not an error.
-authRouter.get("/me", optionalAuth, (req, res) => {
+authRouter.get("/me", optionalAuth, async (req, res) => {
   if (req.loggedOutReason === SIGNED_IN_ELSEWHERE) {
     // The old cookie is useless now. Clearing it means the message
     // is shown once, not on every visit.
@@ -127,6 +128,9 @@ authRouter.get("/me", optionalAuth, (req, res) => {
       ...publicUser(req.user),
       syncError: req.user.syncError || null,
       isOwner: config.ownerLogins.includes(req.user.loginLower),
+      // The count on the "Mentors" link: sessions an admin changed since
+      // this member last opened the Mentors page.
+      sessionAlerts: await countSessionAlerts(req.user),
     },
   });
 });

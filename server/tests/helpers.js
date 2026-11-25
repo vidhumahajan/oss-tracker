@@ -7,8 +7,9 @@ import { app } from "../src/app.js";
 import { connectDB } from "../src/db.js";
 import { User } from "../src/models/User.js";
 import { PullRequest } from "../src/models/PullRequest.js";
+import { testMail } from "../src/services/mail.js";
 
-export { app, request };
+export { app, request, testMail };
 
 // Connect once, start every test with an empty database, disconnect at the end.
 export function useDatabase() {
@@ -18,6 +19,7 @@ export function useDatabase() {
   beforeEach(async () => {
     mock.restoreAll();
     fakeGithub();
+    testMail.reset();
     await mongoose.connection.dropDatabase();
     await Promise.all(Object.values(mongoose.models).map((model) => model.syncIndexes()));
   });

@@ -35,10 +35,24 @@ export default function Privacy() {
           session's status and time. Only you and the admins can see them.
         </li>
         <li>
+          The email address you give when you request a mentor session. Only the admins can see
+          it.
+        </li>
+        <li>
           An access token from GitHub, encrypted, which we use only to refresh your pull requests.
         </li>
       </ul>
-      <p>We do not store your email address, and we do not use tracking or advertising cookies.</p>
+      <p>We do not use tracking or advertising cookies.</p>
+
+      <h2>Session emails</h2>
+      <p>
+        When you request a mentor session, we ask for your email address. We use it only to email
+        you about that session: when it is confirmed, declined, moved or cancelled, and reminders
+        30 minutes before and at the start. We never use it for anything else, and we never share
+        it. Only the admins can see it. The emails do not contain the Google Meet link. You see
+        that on the Mentors page after logging in. The mentor and the admins also get emails about
+        the session, with your username and topic, but never your email address.
+      </p>
 
       <h2>Pull request summaries</h2>
       <p>
@@ -65,7 +79,8 @@ export default function Privacy() {
       <h2>Deleting your data</h2>
       <p>
         Settings has a Delete my account button. It removes your account, all the pull requests and
-        summaries we stored for you, and your mentor sessions, immediately.
+        summaries we stored for you, and your mentor sessions with the email addresses you gave
+        for them, immediately.
       </p>
 
       <h2>Admins</h2>

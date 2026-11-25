@@ -371,6 +371,12 @@ textarea {
   border-bottom-color: var(--merge);
 }
 
+/* The count on "Mentors": sessions that changed since the member last looked. */
+.nav-count {
+  margin-left: 0.35rem;
+  font-weight: 700;
+}
+
 .site-account {
   display: flex;
   align-items: center;
@@ -1157,12 +1163,20 @@ textarea {
 .session-list .actions,
 .mentor-list .actions {
   margin-top: 0.6rem;
+  flex-wrap: wrap; /* Change time, Mark done and Cancel wrap on a phone */
 }
 
 .tag-ok {
   color: var(--merge);
   border-color: var(--merge);
   background: var(--merge-tint);
+}
+
+/* A short line under a form field. */
+.form-hint {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.875rem;
 }
 
 .form-narrow {

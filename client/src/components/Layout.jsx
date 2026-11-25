@@ -22,7 +22,16 @@ export default function Layout({ children }) {
 
           <nav className="site-nav" aria-label="Main">
             <NavLink to="/leaderboard">Leaderboard</NavLink>
-            <NavLink to="/mentors">Mentors</NavLink>
+            <NavLink to="/mentors">
+              Mentors
+              {/* Sessions an admin changed since the member last opened the page. */}
+              {user?.sessionAlerts > 0 && (
+                <span className="tag tag-ok nav-count">
+                  {user.sessionAlerts}
+                  <span className="visually-hidden"> session {user.sessionAlerts === 1 ? "update" : "updates"}</span>
+                </span>
+              )}
+            </NavLink>
             {user && <NavLink to={`/u/${user.login}`}>My profile</NavLink>}
             {user?.role === "admin" && <NavLink to="/admin">Admin</NavLink>}
           </nav>

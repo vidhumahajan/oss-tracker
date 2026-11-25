@@ -59,7 +59,7 @@ export default function Sessions() {
 }
 
 function SessionRow({ item, change }) {
-  // Which small form is open under the row: "confirm", "decline" or none.
+  // Which small form is open under the row: "confirm", "move", "decline" or none.
   const [form, setForm] = useState(null);
   const [when, setWhen] = useState("");
   const [note, setNote] = useState("");
@@ -71,6 +71,14 @@ function SessionRow({ item, change }) {
     // in the admin's own time zone, and toISOString sends it as UTC.
     const scheduledAt = new Date(when).toISOString();
     if (await change(item, { status: "confirmed", scheduledAt }, `Confirmed ${who}.`)) setForm(null);
+  }
+
+  // A new time for a confirmed session. The member and the mentor get an
+  // email, and the reminders go out again for the new time.
+  async function move(event) {
+    event.preventDefault();
+    const scheduledAt = new Date(when).toISOString();
+    if (await change(item, { scheduledAt }, `Moved ${who} to a new time.`)) setForm(null);
   }
 
   async function decline(event) {
@@ -88,6 +96,7 @@ function SessionRow({ item, change }) {
       <p className="session-meta">
         {item.topic}. Prefers: {item.preferredTimes}. Requested {shortDate(item.createdAt)}.
       </p>
+      {item.email && <p className="session-meta">Email: {item.email}</p>}
       {item.scheduledAt && <p className="session-when">{dateTime(item.scheduledAt)}</p>}
       {item.adminNote && <p className="session-meta">Note: {item.adminNote}</p>}
 
@@ -102,8 +111,11 @@ function SessionRow({ item, change }) {
         </div>
       )}
 
-      {item.status === "confirmed" && (
+      {item.status === "confirmed" && !form && (
         <div className="actions">
+          <button type="button" className="button button-quiet button-small" onClick={() => setForm("move")}>
+            Change time
+          </button>
           <button
             type="button"
             className="button button-quiet button-small"
@@ -127,6 +139,19 @@ function SessionRow({ item, change }) {
           <input id={`when-${item.id}`} type="datetime-local" required value={when} onChange={(e) => setWhen(e.target.value)} />
           <button type="submit" className="button button-small">
             Confirm session
+          </button>
+          <button type="button" className="button button-quiet button-small" onClick={() => setForm(null)}>
+            Back
+          </button>
+        </form>
+      )}
+
+      {form === "move" && (
+        <form className="inline-form" onSubmit={move}>
+          <label htmlFor={`move-${item.id}`}>New date and time (your local time)</label>
+          <input id={`move-${item.id}`} type="datetime-local" required value={when} onChange={(e) => setWhen(e.target.value)} />
+          <button type="submit" className="button button-small">
+            Save new time
           </button>
           <button type="button" className="button button-quiet button-small" onClick={() => setForm(null)}>
             Back

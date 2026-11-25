@@ -37,6 +37,10 @@ const userSchema = new mongoose.Schema(
     // When the GitHub profile badge was added, by "Add it for me" or by the
     // member themselves. Until then the home page shows the badge panel.
     badgeAddedAt: Date,
+
+    // When the member last opened the Mentors page. Session changes after
+    // this show as a count on the "Mentors" link (see models/Booking.js).
+    sessionsSeenAt: Date,
   },
   { timestamps: true } // adds createdAt and updatedAt automatically
 );

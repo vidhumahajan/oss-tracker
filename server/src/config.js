@@ -23,6 +23,15 @@ if (!/^[0-9a-f]{64}$/i.test(process.env.TOKEN_ENCRYPTION_KEY)) {
   throw new Error("TOKEN_ENCRYPTION_KEY must be 64 hex characters");
 }
 
+// Session emails show dates in this zone. A typo here would make every
+// email fail later, so it is checked now.
+const timeZone = process.env.TIME_ZONE || "Asia/Kolkata";
+try {
+  new Intl.DateTimeFormat("en", { timeZone });
+} catch {
+  throw new Error(`TIME_ZONE is not a time zone name: ${timeZone}`);
+}
+
 export const config = {
   port: Number(process.env.PORT) || 4000,
   mongoUri: process.env.MONGODB_URI,
@@ -56,6 +65,19 @@ export const config = {
   // Without both values, members copy the badge line by hand instead.
   badgeClientId: process.env.BADGE_GITHUB_CLIENT_ID || "",
   badgeClientSecret: process.env.BADGE_GITHUB_CLIENT_SECRET || "",
+
+  // Optional. The email account that sends session emails (services/mail.js).
+  // Without SMTP_HOST, SMTP_USER and SMTP_PASS, no email is sent and
+  // everything else works as before.
+  smtpHost: process.env.SMTP_HOST || "",
+  smtpPort: Number(process.env.SMTP_PORT) || 587,
+  smtpUser: process.env.SMTP_USER || "",
+  smtpPass: process.env.SMTP_PASS || "",
+  // The "From" address. Gmail only allows your own address here.
+  mailFrom: process.env.MAIL_FROM || process.env.SMTP_USER || "",
+  // Where new session requests and reminders for the admins go.
+  adminEmail: process.env.ADMIN_EMAIL || "",
+  timeZone,
 
   isProduction: process.env.NODE_ENV === "production",
   isTest: process.env.NODE_ENV === "test",

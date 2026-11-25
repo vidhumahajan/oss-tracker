@@ -56,6 +56,22 @@ export function requireMeetLink(value) {
   return link;
 }
 
+// Something that looks like an email address: text, an @, and a domain
+// with a dot. Whether it really exists only shows when an email bounces.
+export function requireEmail(value, name = "email") {
+  const email = requireString(value, name, { max: 200 });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new HttpError(400, `${name} must be an email address, like name@example.com`);
+  }
+  return email;
+}
+
+// Like requireEmail, but "" when the value is missing or empty.
+export function optionalEmail(value, name = "email") {
+  if (value === undefined || value === null || value === "") return "";
+  return requireEmail(value, name);
+}
+
 // A date and time sent as text, for example "2026-12-05T12:30:00.000Z".
 export function requireDate(value, name) {
   const date = typeof value === "string" ? new Date(value) : null;

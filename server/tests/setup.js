@@ -16,3 +16,11 @@ process.env.ADMIN_LOGINS = "the-owner";
 process.env.AI_API_KEY = "test-ai-key";
 process.env.AI_API_URL = "https://ai.test/openai/v1/chat/completions";
 process.env.SUMMARY_MODEL = "test-model";
+// Email is never really sent in tests: services/mail.js keeps the messages
+// in memory instead. These only make the settings look complete.
+process.env.SMTP_HOST = "smtp.test";
+process.env.SMTP_USER = "sender@test.example";
+process.env.SMTP_PASS = "test-password";
+process.env.MAIL_FROM = "OSS Tracker <sender@test.example>";
+process.env.ADMIN_EMAIL = "admins@test.example";
+process.env.TIME_ZONE = "Asia/Kolkata";

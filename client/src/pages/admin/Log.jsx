@@ -23,6 +23,7 @@ const ACTIONS = {
   decline_session: "declined the session of",
   complete_session: "marked as done the session of",
   cancel_session: "cancelled the session of",
+  reschedule_session: "changed the time of the session of",
   post_announcement: "posted the announcement",
   delete_announcement: "deleted the announcement",
   export_members: "downloaded the member list:",

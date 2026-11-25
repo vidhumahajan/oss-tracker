@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../api.js";
 import { useApi } from "../useApi.js";
 import { useAuth, loginUrl } from "../auth.jsx";
@@ -15,9 +15,15 @@ const STATUS_WORD = {
 
 // Public page: the mentors, and for logged-in members, their own sessions.
 export default function Mentors() {
-  const { user } = useAuth();
+  const { user, setUser } = useAuth();
   const mentors = useApi("/mentors");
   const sessions = useApi(user ? "/mentors/bookings" : null);
+
+  // Loading the sessions tells the server the member has seen every
+  // change, so the count on the "Mentors" link goes back to zero.
+  useEffect(() => {
+    if (sessions.data) setUser((current) => (current ? { ...current, sessionAlerts: 0 } : current));
+  }, [sessions.data, setUser]);
 
   return (
     <>
@@ -55,6 +61,7 @@ function RequestSession({ mentor, user, onBooked }) {
   const [open, setOpen] = useState(false);
   const [topic, setTopic] = useState("");
   const [preferredTimes, setPreferredTimes] = useState("");
+  const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState({ text: "", failed: false });
 
@@ -63,11 +70,14 @@ function RequestSession({ mentor, user, onBooked }) {
     setBusy(true);
     setNotice({ text: "", failed: false });
     try {
-      await api(`/mentors/${mentor.id}/bookings`, { method: "POST", body: { topic, preferredTimes } });
+      await api(`/mentors/${mentor.id}/bookings`, { method: "POST", body: { topic, preferredTimes, email } });
       setTopic("");
       setPreferredTimes("");
       setOpen(false);
-      setNotice({ text: "Request sent. You will see the time under My sessions once an admin confirms it.", failed: false });
+      setNotice({
+        text: "Request sent. We will email you when an admin confirms a time, and you will see it under My sessions.",
+        failed: false,
+      });
       onBooked();
     } catch (err) {
       setNotice({ text: err.message, failed: true });
@@ -103,7 +113,7 @@ function RequestSession({ mentor, user, onBooked }) {
     );
   }
 
-  const ids = { topic: `topic-${mentor.id}`, times: `times-${mentor.id}` };
+  const ids = { topic: `topic-${mentor.id}`, times: `times-${mentor.id}`, email: `email-${mentor.id}` };
   return (
     <form className="form form-narrow" onSubmit={send}>
       <label htmlFor={ids.topic}>What would you like to talk about?</label>
@@ -124,6 +134,19 @@ function RequestSession({ mentor, user, onBooked }) {
         placeholder="For example: Saturday after 6pm"
         onChange={(event) => setPreferredTimes(event.target.value)}
       />
+      <label htmlFor={ids.email}>Your email address</label>
+      <input
+        id={ids.email}
+        type="email"
+        autoComplete="email"
+        value={email}
+        maxLength={200}
+        required
+        onChange={(event) => setEmail(event.target.value)}
+      />
+      <p className="form-hint">
+        Only the admins see it. We use it only for emails about this session.
+      </p>
       <div className="actions">
         <button type="submit" className="button" disabled={busy}>
           {busy ? "Sending…" : "Send request"}

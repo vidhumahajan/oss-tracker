@@ -19,12 +19,25 @@ const bookingSchema = new mongoose.Schema(
     },
     scheduledAt: Date, // set when an admin confirms
     adminNote: String,
+
+    // Private. Where the session emails go. Only admins ever see it.
+    email: String,
+    // When an admin last changed the status or the time. The red count on
+    // the member's "Mentors" link counts sessions changed since they last
+    // opened that page (User.sessionsSeenAt).
+    statusChangedAt: Date,
+    // When each reminder email went out (jobs/reminderLoop.js). Saved so
+    // each one is sent once, even after a restart. Cleared on a new time.
+    reminder30SentAt: Date,
+    reminderStartSentAt: Date,
   },
   { timestamps: true }
 );
 
 bookingSchema.index({ member: 1, status: 1 });
 bookingSchema.index({ createdAt: -1 });
+// The reminder job looks for confirmed sessions by time.
+bookingSchema.index({ status: 1, scheduledAt: 1 });
 
 export const Booking = mongoose.model("Booking", bookingSchema);
 
@@ -44,4 +57,11 @@ const MEMBER_MOVES = {
 export function canMove(from, to, { byAdmin }) {
   const moves = byAdmin ? ADMIN_MOVES : MEMBER_MOVES;
   return (moves[from] || []).includes(to);
+}
+
+// How many of this member's sessions an admin changed since the member
+// last opened the Mentors page. Only their own sessions are counted.
+export async function countSessionAlerts(user) {
+  const since = user.sessionsSeenAt || new Date(0);
+  return Booking.countDocuments({ member: user._id, statusChangedAt: { $gt: since } });
 }

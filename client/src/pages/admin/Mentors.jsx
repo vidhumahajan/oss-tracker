@@ -3,7 +3,7 @@ import { api } from "../../api.js";
 import { useApi } from "../../useApi.js";
 import Sessions from "./Sessions.jsx";
 
-const EMPTY = { name: "", expertise: "", bio: "", meetLink: "" };
+const EMPTY = { name: "", expertise: "", bio: "", meetLink: "", email: "" };
 
 // The admin Mentors tab: add, edit, hide or show mentors, then the
 // session requests below. There is no delete, so past sessions keep
@@ -45,7 +45,8 @@ export default function Mentors() {
     <>
       <p className="page-lede">
         Mentors show on the public Mentors page. Their Google Meet link is private: only admins
-        and members with a confirmed session can see it.
+        and members with a confirmed session can see it. Their email address is private too, and
+        is used only for session emails.
       </p>
 
       {notice.text && (
@@ -84,6 +85,7 @@ export default function Mentors() {
                       {mentor.meetLink}
                     </a>
                   </p>
+                  <p className="session-meta">{mentor.email || "No email address, so no session emails"}</p>
                   <div className="actions">
                     <button type="button" className="button button-quiet button-small" onClick={() => setEditing(mentor.id)}>
                       Edit
@@ -116,6 +118,7 @@ function MentorForm({ initial, submitLabel, onSubmit, onCancel, clearAfter = fal
     expertise: initial.expertise,
     bio: initial.bio,
     meetLink: initial.meetLink,
+    email: initial.email || "",
   });
   const [busy, setBusy] = useState(false);
   const id = (name) => `mentor-${initial.id || "new"}-${name}`;
@@ -156,6 +159,16 @@ function MentorForm({ initial, submitLabel, onSubmit, onCancel, clearAfter = fal
         required
         placeholder="https://meet.google.com/abc-defg-hij"
         onChange={change("meetLink")}
+      />
+
+      <label htmlFor={id("email")}>Email address (optional)</label>
+      <input
+        id={id("email")}
+        type="email"
+        value={fields.email}
+        maxLength={200}
+        placeholder="For session emails and reminders"
+        onChange={change("email")}
       />
 
       <div className="actions">
