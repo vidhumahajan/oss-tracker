@@ -44,8 +44,11 @@ export const config = {
 
   // Optional. Without a key, "Write summary" is switched off and the
   // generate route answers 503. Existing summaries can still be read.
-  anthropicApiKey: process.env.ANTHROPIC_API_KEY || "",
-  summaryModel: process.env.SUMMARY_MODEL || "claude-haiku-5-5",
+  // Any OpenAI-compatible chat completions address works. The default is
+  // Groq, which has a free plan.
+  aiApiKey: process.env.AI_API_KEY || "",
+  aiApiUrl: process.env.AI_API_URL || "https://api.groq.com/openai/v1/chat/completions",
+  summaryModel: process.env.SUMMARY_MODEL || "openai/gpt-oss-120b",
 
   isProduction: process.env.NODE_ENV === "production",
   isTest: process.env.NODE_ENV === "test",

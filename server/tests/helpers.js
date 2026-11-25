@@ -70,12 +70,14 @@ export const ai = {
   calls: [], // every request body the app sent
   reply: null, // an object (sent as JSON text) or a string (sent as is)
   status: 200,
-  stopReason: "end_turn",
+  errorMessage: "nope", // the error message sent with a status other than 200
+  finishReason: "stop",
   reset() {
     this.calls = [];
     this.reply = goodSummary();
     this.status = 200;
-    this.stopReason = "end_turn";
+    this.errorMessage = "nope";
+    this.finishReason = "stop";
   },
 };
 
@@ -104,18 +106,24 @@ function fakeRepoCall(path) {
   return json(github.prDetails[key] || { title: item?.title || "A PR", body: "" });
 }
 
+// Answers in the OpenAI-compatible chat completions shape that Groq uses.
 function fakeAi(options) {
   ai.calls.push(JSON.parse(options.body));
-  if (ai.status !== 200) return json({ type: "error", error: { message: "nope" } }, ai.status);
+  if (ai.status !== 200) {
+    return json({ error: { message: ai.errorMessage, type: "error" } }, ai.status);
+  }
   const text = typeof ai.reply === "string" ? ai.reply : JSON.stringify(ai.reply);
   return json({
-    type: "message",
-    role: "assistant",
-    stop_reason: ai.stopReason,
-    content: [
-      { type: "thinking", thinking: "" },
-      { type: "text", text },
+    object: "chat.completion",
+    model: "test-model",
+    choices: [
+      {
+        index: 0,
+        message: { role: "assistant", content: text },
+        finish_reason: ai.finishReason,
+      },
     ],
+    usage: { prompt_tokens: 1000, completion_tokens: 500, total_tokens: 1500 },
   });
 }
 
@@ -126,7 +134,7 @@ export function fakeGithub() {
   mock.method(globalThis, "fetch", async (url, options = {}) => {
     const target = new URL(String(url));
 
-    if (target.hostname === "api.anthropic.com") return fakeAi(options);
+    if (target.hostname === "ai.test") return fakeAi(options);
 
     // Login: code -> token. The code "bad" is rejected; any other code
     // becomes the token "token-for-<code>".

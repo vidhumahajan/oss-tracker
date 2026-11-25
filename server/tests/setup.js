@@ -13,5 +13,6 @@ process.env.TOKEN_ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef0123456789ab
 process.env.APP_URL = "http://localhost:5173";
 process.env.ADMIN_LOGINS = "the-owner";
 // The AI service is faked in helpers.js, so this key is never really used.
-process.env.ANTHROPIC_API_KEY = "test-anthropic-key";
-process.env.SUMMARY_MODEL = "claude-haiku-5-5";
+process.env.AI_API_KEY = "test-ai-key";
+process.env.AI_API_URL = "https://ai.test/openai/v1/chat/completions";
+process.env.SUMMARY_MODEL = "test-model";

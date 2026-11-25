@@ -57,10 +57,17 @@ A summary is written once per merged pull request and saved on it, because a mer
 
 - Only the pull request's author or an admin can ask for one. Anyone who can see the profile can read it.
 - The server collects the pull request's title, description and changed files from GitHub with the member's own token, plus the issue it fixes when the description says "fixes #N", "closes #N" or "resolves #N".
-- To keep each request small, descriptions are cut to 3000 characters, at most 15 files are sent, the diffs together are cut to about 12000 characters, and lock, minified and generated files are left out.
+- To keep each request small, descriptions are cut to 1000 characters, at most 15 files are sent, the diffs together are cut to about 4000 characters, and lock, minified and generated files are left out. The largest request is about 3000 tokens plus 2000 kept for the reply, which fits inside the free plan's 8000 tokens a minute.
 - The AI is told that all of this is untrusted material to summarise, never instructions. It must answer in a fixed JSON shape, and every field is checked for type and length before anything is saved. A reply that fails the check is thrown away (502).
-- Each member can ask for 10 summaries in 24 hours, counted from their first one. An attempt that fails before the AI is called, for example because GitHub refused, does not count. One that reaches the AI does, even if it then fails.
-- Without `ANTHROPIC_API_KEY`, the button is hidden and the route answers 503.
+- Each member can ask for 3 summaries in 24 hours, counted from their first one. An attempt that fails before the AI is called, for example because GitHub refused, does not count. One that reaches the AI does, even if it then fails.
+- The AI service's own rate limits never count against the member. If the site is over the per-minute limit, the member sees "The summary service is busy. Try again in a minute." If it is over the daily limit, they see "Today's free summaries are used up. Try again tomorrow." Both answer 429.
+- Without `AI_API_KEY`, the button is hidden and the route answers 503.
+
+#### The AI service
+
+Summaries use [Groq](https://console.groq.com)'s free plan through its OpenAI-compatible chat completions address, called with plain fetch. Get a free key at https://console.groq.com/keys. The default model is `openai/gpt-oss-120b`. At the time of writing its free plan allows 30 requests and 8000 tokens a minute, and 1000 requests and 200000 tokens a day, for the whole site. That is roughly 40 to 60 summaries a day across all members. Check the current numbers on your account's Limits page.
+
+To move to another OpenAI-compatible service, change `AI_API_URL`, `AI_API_KEY` and `SUMMARY_MODEL`. No code changes are needed, as long as the service supports `response_format` with `json_schema` and the model accepts `reasoning_effort`.
 
 ### Mentors and sessions
 
@@ -95,7 +102,7 @@ One rule produces every number on the site, so profiles, the leaderboard and the
 | Scripts loaded from other sites | A Content Security Policy header, set by Helmet |
 | A redirect to another site after login | Only paths on this site are accepted as the return address |
 | Text in a pull request tries to give the AI instructions | The AI is told the material is untrusted, its reply must match a fixed shape and pass length checks, and it is shown as plain text |
-| A member runs up the AI bill | 10 summaries per member per day, small inputs, and the AI never rewrites a saved summary. Editing one never calls the AI |
+| A member uses up the free AI allowance | 3 summaries per member per day, small inputs, and the AI never rewrites a saved summary. Editing one never calls the AI |
 | A mentor's private Meet link leaks | It is sent only to admins and to the member with a confirmed session. Links that are not `https://meet.google.com/...` are rejected |
 | A member books every mentor | One open session per mentor and at most 2 in total |
 | A mistaken or bad admin action | Every admin action is logged, and owners cannot be changed from the panel |
@@ -152,8 +159,9 @@ The site runs as one web service plus a hosted database. These steps use Render 
    | `TOKEN_ENCRYPTION_KEY` | a new random value, 64 hex characters |
    | `ADMIN_LOGINS` | your GitHub username |
    | `APP_URL` | `https://YOUR-SITE`, with no slash at the end |
-   | `ANTHROPIC_API_KEY` | optional, turns on pull request summaries |
-   | `SUMMARY_MODEL` | optional, defaults to `claude-haiku-5-5` |
+   | `AI_API_KEY` | optional, turns on pull request summaries. Free key at https://console.groq.com/keys |
+   | `AI_API_URL` | optional, defaults to `https://api.groq.com/openai/v1/chat/completions` |
+   | `SUMMARY_MODEL` | optional, defaults to `openai/gpt-oss-120b` |
 
 Before inviting people:
 

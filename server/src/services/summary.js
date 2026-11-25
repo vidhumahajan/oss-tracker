@@ -9,18 +9,21 @@ import { User } from "../models/User.js";
 import { PullRequest } from "../models/PullRequest.js";
 import { config } from "../config.js";
 import { fetchPullRequest, fetchPullRequestFiles, fetchIssue } from "./github.js";
-import { aiEnabled, askForJson } from "./ai.js";
+import { aiEnabled, askForJson, AiRateLimitError } from "./ai.js";
 import { decrypt } from "../utils/crypto.js";
 import { HttpError } from "../utils/httpError.js";
 import { isText, isList } from "../utils/validate.js";
 
-export const SUMMARIES_PER_DAY = 10;
+export const SUMMARIES_PER_DAY = 3;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-// Limits on what we send, so a huge PR stays cheap and fast.
-const MAX_BODY_CHARS = 3000; // PR description and issue description, each
+// Limits on what we send. The free AI plan allows about 8000 tokens a
+// minute for the whole site, and a token is roughly 3 to 4 characters.
+// At these caps the largest request (instructions, material and room for
+// the reply) stays under about 6000 tokens, so it always fits.
+const MAX_BODY_CHARS = 1000; // PR description and issue description, each
 const MAX_FILES = 15;
-const MAX_PATCH_CHARS = 12000; // all diffs together
+const MAX_PATCH_CHARS = 4000; // all diffs together
 
 // Files whose diffs say nothing about the work: lock files, minified files,
 // and files a tool generated.
@@ -91,6 +94,12 @@ async function useDailySlot(userId) {
 
   const user = await User.findById(userId);
   throw limitError(user.summaryWindowStart, now);
+}
+
+// Gives back a summary taken by useDailySlot, when the AI service refused
+// the request without doing any work.
+async function returnDailySlot(userId) {
+  await User.updateOne({ _id: userId, summaryCount: { $gt: 0 } }, { $inc: { summaryCount: -1 } });
 }
 
 // ---------- Collecting the material ----------
@@ -276,13 +285,20 @@ export async function writeSummary(pr, user) {
     // Counted only now, just before the AI call. A failure before this point
     // (for example GitHub refusing) cost nothing, so it does not count. Once
     // the AI is called the attempt counts even if it fails, because the call
-    // cost money.
+    // used up the site's allowance. The one exception is the service's own
+    // rate limit: it refused before doing any work, so the slot is given back.
     await useDailySlot(user._id);
-    const reply = await askForJson({
-      system: SYSTEM,
-      prompt: `<material>\n${materialText(material, pr)}\n</material>`,
-      schema: SCHEMA,
-    });
+    let reply;
+    try {
+      reply = await askForJson({
+        system: SYSTEM,
+        prompt: `<material>\n${materialText(material, pr)}\n</material>`,
+        schema: SCHEMA,
+      });
+    } catch (error) {
+      if (error instanceof AiRateLimitError) await returnDailySlot(user._id);
+      throw error;
+    }
 
     const summary = checkSummary(reply);
     if (!summary) {

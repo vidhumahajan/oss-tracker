@@ -35,7 +35,7 @@ export default function Privacy() {
       <p>
         When a member asks for a summary of one of their merged pull requests, the pull request's
         public title, description and code changes, and the issue it fixes if it names one, are
-        sent to an AI service (Claude, made by Anthropic), which writes the summary. Nothing
+        sent to an AI service, which writes the summary. Nothing
         private is sent: these are the same public pages anyone can open on GitHub. The summary
         is saved with the pull request, and anyone who can see the profile can read it. An admin
         can delete a summary.
