@@ -15,6 +15,7 @@ import { meRouter } from "./routes/me.js";
 import { usersRouter } from "./routes/users.js";
 import { publicRouter } from "./routes/public.js";
 import { adminRouter } from "./routes/admin.js";
+import { mentorsRouter } from "./routes/mentors.js";
 
 export const app = express();
 
@@ -54,6 +55,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/me", meRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/admin", adminRouter);
+app.use("/api/mentors", mentorsRouter);
 app.use("/api", publicRouter);
 app.use("/api", notFound);
 

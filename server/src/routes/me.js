@@ -2,6 +2,7 @@
 import { Router } from "express";
 import { User, publicUser } from "../models/User.js";
 import { PullRequest } from "../models/PullRequest.js";
+import { Booking } from "../models/Booking.js";
 import { requireAuth } from "../middleware/auth.js";
 import { syncUser } from "../services/sync.js";
 import { HttpError } from "../utils/httpError.js";
@@ -41,6 +42,7 @@ meRouter.patch("/", async (req, res) => {
 // Delete my account and everything we stored about me.
 meRouter.delete("/", async (req, res) => {
   await PullRequest.deleteMany({ author: req.user._id });
+  await Booking.deleteMany({ member: req.user._id });
   await User.deleteOne({ _id: req.user._id });
   res.clearCookie("token", cookieOptions);
   res.json({ ok: true });

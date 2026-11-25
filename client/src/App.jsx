@@ -7,6 +7,7 @@ import Leaderboard from "./pages/Leaderboard.jsx";
 import Profile from "./pages/Profile.jsx";
 import Settings from "./pages/Settings.jsx";
 import Privacy from "./pages/Privacy.jsx";
+import Mentors from "./pages/Mentors.jsx";
 import NotFound from "./pages/NotFound.jsx";
 
 // The admin panel is loaded only when an admin opens it, so ordinary
@@ -33,6 +34,7 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/leaderboard" element={<Leaderboard />} />
         <Route path="/u/:login" element={<Profile />} />
+        <Route path="/mentors" element={<Mentors />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route
           path="/settings"

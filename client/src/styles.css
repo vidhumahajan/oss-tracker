@@ -1035,6 +1035,105 @@ textarea {
   border-left: 3px solid var(--merge);
 }
 
+/* Mentors and sessions: the public Mentors page and the admin Mentors tab. */
+.mentor-list,
+.session-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.mentor-list > li,
+.session-list > li {
+  padding: 1.1rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.mentor-list h2 {
+  margin: 0;
+}
+
+.mentor-expertise {
+  margin: 0.3rem 0 0.4rem;
+  color: var(--merge);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.mentor-bio {
+  max-width: 40rem;
+  white-space: pre-line; /* keep the line breaks the admin typed */
+  overflow-wrap: anywhere;
+}
+
+.session-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.75rem;
+}
+
+.session-head a {
+  font-weight: 600;
+}
+
+.session-meta {
+  margin: 0.25rem 0;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.session-when {
+  margin: 0.4rem 0;
+  font-weight: 600;
+}
+
+.session-list .actions,
+.mentor-list .actions {
+  margin-top: 0.6rem;
+}
+
+.tag-ok {
+  color: var(--merge);
+  border-color: var(--merge);
+  background: var(--merge-tint);
+}
+
+.form-narrow {
+  max-width: 32rem;
+  margin-top: 0.75rem;
+}
+
+.form .actions {
+  margin-top: 0.75rem;
+}
+
+.form .actions button {
+  margin-top: 0;
+}
+
+/* A one-line form that opens under a row, for example "pick a time". */
+.inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+
+.inline-form label {
+  flex-basis: 100%;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.inline-form input {
+  flex: 1;
+  min-width: 12rem;
+  max-width: 22rem;
+}
+
 /* ---------- 8. Settings and admin ---------- */
 
 .setting {
@@ -1227,6 +1326,12 @@ textarea {
   .site-nav {
     order: 3;
     flex-basis: 100%;
+    flex-wrap: wrap;
+    gap: 0.25rem 1rem;
+  }
+
+  .site-nav a {
+    white-space: nowrap; /* "My profile" stays on one line */
   }
 
   .site-account {

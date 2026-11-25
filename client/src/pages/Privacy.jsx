@@ -22,6 +22,10 @@ export default function Privacy() {
         </li>
         <li>Summaries of your merged pull requests, if you or an admin asked for one.</li>
         <li>
+          Mentor sessions you request: the mentor, your topic, the times you suggested, and the
+          session's status and time. Only you and the admins can see them.
+        </li>
+        <li>
           An access token from GitHub, encrypted, which we use only to refresh your pull requests.
         </li>
       </ul>
@@ -51,8 +55,8 @@ export default function Privacy() {
 
       <h2>Deleting your data</h2>
       <p>
-        Settings has a Delete my account button. It removes your account and all the pull requests
-        we stored for you, immediately.
+        Settings has a Delete my account button. It removes your account, all the pull requests and
+        summaries we stored for you, and your mentor sessions, immediately.
       </p>
 
       <h2>Admins</h2>

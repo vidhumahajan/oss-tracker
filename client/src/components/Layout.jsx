@@ -22,6 +22,7 @@ export default function Layout({ children }) {
 
           <nav className="site-nav" aria-label="Main">
             <NavLink to="/leaderboard">Leaderboard</NavLink>
+            <NavLink to="/mentors">Mentors</NavLink>
             {user && <NavLink to={`/u/${user.login}`}>My profile</NavLink>}
             {user?.role === "admin" && <NavLink to="/admin">Admin</NavLink>}
           </nav>

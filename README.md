@@ -13,7 +13,8 @@ Built with MongoDB, Express, React and Node (MERN), in plain JavaScript.
 - **Pull request summaries.** Before a GSoC or LFX interview, a member opens one of their merged pull requests and gets a short AI-written explanation: the problem, the solution, the concepts used, the files changed and three questions an interviewer could ask.
 - **Leaderboard.** This week, this month and all time.
 - **Fair play.** Only merged pull requests count. Pull requests to your own repos are ignored. Admins can block a repo or exclude a single pull request.
-- **Admin panel.** Member search, ban, admin roles, CSV export, repo review, announcements, and a log of every admin action.
+- **Mentors.** A public Mentors page lists a few experienced members. Members request a free 1-on-1 session, an admin confirms a time, and the member gets the Google Meet link. There is no payment.
+- **Admin panel.** Member search, ban, admin roles, CSV export, repo review, announcements, mentors and session requests, and a log of every admin action.
 - **Privacy.** Members can hide their profile or delete their account and data.
 
 ## How it works
@@ -22,7 +23,7 @@ There are three pieces:
 
 1. **The React app** (`client/`) runs in the browser and draws the pages.
 2. **The API** (`server/`) answers the React app's requests, talks to GitHub and the AI service, and reads and writes the database.
-3. **MongoDB** stores users, pull requests, blocked repos, announcements and the admin log.
+3. **MongoDB** stores users, pull requests (with their summaries), blocked repos, announcements, mentors, session requests and the admin log.
 
 It is a monolith: one server holds every feature. Once deployed, that server also serves the built React files, so the whole product lives on one address. During development, Vite serves the React app and forwards every `/api` request to the server. Either way the browser talks to a single address, so there is no CORS setup.
 
@@ -59,6 +60,20 @@ A summary is written once per merged pull request and saved on it, because a mer
 - Each member can ask for 10 summaries in 24 hours, counted from their first one.
 - Without `ANTHROPIC_API_KEY`, the button is hidden and the route answers 503.
 
+### Mentors and sessions
+
+Admins add mentors on the admin Mentors tab: name, expertise, bio and a Google Meet link. Only links starting with `https://meet.google.com/` are accepted. Mentors can be edited and hidden, never deleted, so old sessions keep their mentor.
+
+A session moves through these steps:
+
+- **requested**: the member asked, with a topic and the times that suit them.
+- **confirmed**: an admin picked a date and time. The member now sees the time in their own time zone and a "Join on Google Meet" link. Or **declined**, with an optional note.
+- **done** or **cancelled**: a confirmed session ends one of these two ways.
+
+A member can cancel their own requested or confirmed session. Each member can have one open session (requested or confirmed) per mentor, and at most 2 open sessions in total. Hidden mentors cannot be booked.
+
+The Meet link is private. It is sent only to admins and to the member whose session is confirmed, and never appears on the public Mentors page.
+
 ### What counts
 
 One rule produces every number on the site, so profiles, the leaderboard and the feed always agree. A pull request counts if it is merged, an admin has not excluded it, and its repo is not blocked. Banned members and private profiles are left out of the leaderboard, the feed and the public totals.
@@ -79,6 +94,8 @@ One rule produces every number on the site, so profiles, the leaderboard and the
 | A redirect to another site after login | Only paths on this site are accepted as the return address |
 | Text in a pull request tries to give the AI instructions | The AI is told the material is untrusted, its reply must match a fixed shape and pass length checks, and it is shown as plain text |
 | A member runs up the AI bill | 10 summaries per member per day, small inputs, and a saved summary is never written again |
+| A mentor's private Meet link leaks | It is sent only to admins and to the member with a confirmed session. Links that are not `https://meet.google.com/...` are rejected |
+| A member books every mentor | One open session per mentor and at most 2 in total |
 | A mistaken or bad admin action | Every admin action is logged, and owners cannot be changed from the panel |
 
 ## Run it locally

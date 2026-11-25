@@ -10,6 +10,7 @@ import { AdminLog, logAdminAction } from "../models/AdminLog.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import { countedFilter, getBlockedRepoKeys } from "../services/stats.js";
 import { syncUser } from "../services/sync.js";
+import { adminMentorsRouter } from "./adminMentors.js";
 import { HttpError } from "../utils/httpError.js";
 import {
   parsePage,
@@ -349,6 +350,12 @@ adminRouter.delete("/announcements/:id", async (req, res) => {
   await logAdminAction(req.user, "delete_announcement", removed.title);
   res.json({ ok: true });
 });
+
+// ---------- Mentors and sessions ----------
+
+// Kept in its own file to keep this one short. Attached here so the
+// admin check at the top of this file covers it too.
+adminRouter.use(adminMentorsRouter);
 
 // ---------- Log ----------
 

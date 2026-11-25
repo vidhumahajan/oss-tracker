@@ -40,6 +40,31 @@ export function escapeRegex(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+// Like requireString, but "" when the value is missing or empty.
+export function optionalString(value, name, { max = 200 } = {}) {
+  if (value === undefined || value === null || value === "") return "";
+  return requireString(value, name, { max });
+}
+
+// A Google Meet link, and nothing else. The address must start with
+// https://meet.google.com/ so a link can never send members to another site.
+export function requireMeetLink(value) {
+  const link = requireString(value, "meetLink", { max: 200 });
+  if (!/^https:\/\/meet\.google\.com\/[A-Za-z0-9-]+$/.test(link)) {
+    throw new HttpError(400, "meetLink must be a Google Meet link, like https://meet.google.com/abc-defg-hij");
+  }
+  return link;
+}
+
+// A date and time sent as text, for example "2026-12-05T12:30:00.000Z".
+export function requireDate(value, name) {
+  const date = typeof value === "string" ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) {
+    throw new HttpError(400, `${name} must be a date and time`);
+  }
+  return date;
+}
+
 // Yes/no checks for data we did not get from the browser, such as an AI
 // reply. The caller decides which error to throw when one fails.
 export function isText(value, { max }) {

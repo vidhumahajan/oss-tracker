@@ -3,6 +3,7 @@ import Overview from "./Overview.jsx";
 import Members from "./Members.jsx";
 import Repos from "./Repos.jsx";
 import Announcements from "./Announcements.jsx";
+import Mentors from "./Mentors.jsx";
 import Log from "./Log.jsx";
 
 // The admin panel: a row of sections, each one its own page under /admin.
@@ -23,6 +24,9 @@ export default function Admin() {
         <NavLink to="/admin/announcements" className="tab">
           Announcements
         </NavLink>
+        <NavLink to="/admin/mentors" className="tab">
+          Mentors
+        </NavLink>
         <NavLink to="/admin/log" className="tab">
           Log
         </NavLink>
@@ -33,6 +37,7 @@ export default function Admin() {
         <Route path="members" element={<Members />} />
         <Route path="repos" element={<Repos />} />
         <Route path="announcements" element={<Announcements />} />
+        <Route path="mentors" element={<Mentors />} />
         <Route path="log" element={<Log />} />
       </Routes>
     </>

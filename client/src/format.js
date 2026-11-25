@@ -31,6 +31,20 @@ export function shortDate(value) {
   });
 }
 
+// "Sat, 5 Dec 2026, 6:00 pm IST", in the viewer's own time zone.
+export function dateTime(value) {
+  if (!value) return "";
+  return new Date(value).toLocaleString(undefined, {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  });
+}
+
 // "2026-11" -> "Nov"
 export function monthName(key) {
   const [year, month] = key.split("-").map(Number);
