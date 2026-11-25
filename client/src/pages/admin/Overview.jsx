@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useApi } from "../../useApi.js";
 import { number } from "../../format.js";
+import WeeklyPost from "./WeeklyPost.jsx";
 
 export default function Overview() {
   const { data, error } = useApi("/admin/overview");
@@ -50,6 +51,8 @@ export default function Overview() {
           <Link to="/admin/members?filter=admins">Show them</Link>
         </li>
       </ul>
+
+      <WeeklyPost />
     </>
   );
 }

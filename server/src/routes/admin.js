@@ -10,6 +10,7 @@ import { AdminLog, logAdminAction } from "../models/AdminLog.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
 import { countedFilter, getBlockedRepoKeys } from "../services/stats.js";
 import { syncUser } from "../services/sync.js";
+import { weeklyPostText } from "../services/weeklyPost.js";
 import { adminMentorsRouter } from "./adminMentors.js";
 import { HttpError } from "../utils/httpError.js";
 import {
@@ -70,6 +71,12 @@ adminRouter.get("/overview", async (req, res) => {
     mergedThisWeek,
     blockedRepos,
   });
+});
+
+// A ready-to-paste message about this week's leaderboard, for the
+// WhatsApp group. It only reads, so nothing is logged.
+adminRouter.get("/weekly-post", async (req, res) => {
+  res.json({ text: await weeklyPostText() });
 });
 
 // ---------- Members ----------

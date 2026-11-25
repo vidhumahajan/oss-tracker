@@ -36,6 +36,7 @@ test("every admin route refuses visitors and ordinary members", async () => {
   const id = alice.user.id;
   const routes = [
     ["get", "/api/admin/overview"],
+    ["get", "/api/admin/weekly-post"],
     ["get", "/api/admin/users"],
     ["get", "/api/admin/users.csv"],
     ["patch", `/api/admin/users/${id}`],

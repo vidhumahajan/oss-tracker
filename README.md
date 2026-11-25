@@ -15,6 +15,7 @@ Built with MongoDB, Express, React and Node (MERN), in plain JavaScript.
 - **Leaderboard.** This week, this month and all time.
 - **Fair play.** Only merged pull requests count. Pull requests to your own repos are ignored. Admins can block a repo or exclude a single pull request.
 - **Mentors.** A public Mentors page lists a few experienced members. Members request a free 1-on-1 session, an admin confirms a time, and the member gets the Google Meet link. There is no payment.
+- **Weekly post.** On the admin Overview, one click writes a plain-text message with this week's top 5, totals and first-time mergers, ready to paste into the community's WhatsApp group.
 - **Admin panel.** Member search, ban, admin roles, CSV export, repo review, announcements, mentors and session requests, and a log of every admin action.
 - **Privacy.** Members can hide their profile or delete their account and data.
 
